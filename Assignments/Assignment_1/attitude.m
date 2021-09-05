@@ -52,20 +52,24 @@ k_d = 400;
 K_d = k_d * eye(3);
 
 % Desired system state
+A_e2 = 15;
+A_e3 = 10;
+T_e2 = 0.1;
+T_e3 = 0.05;
 t = 1:N + 1;
-phi_t = 0 * t * deg2rad;
-theta_t = 15 * cos(0.1*t) * deg2rad;
-psi_t = 10*sin(0.05 * t) * deg2rad;
+eps1_d = 0 * t * deg2rad;
+eps2_d = A_e2 * cos(T_e2 * t) * deg2rad;
+eps3_d = A_e3 * sin(T_e3 * t) * deg2rad;
 
-eta_t = sqrt(phi_t.^2 + theta_t.^2 + psi_t.^2);
+eta_d = sqrt(1 - eps1_d.^2 - eps2_d.^2 - eps3_d.^2);
 
-q_d = [eta_t; phi_t; theta_t; psi_t]';
+q_d = [eta_d; eps1_d; eps2_d; eps3_d]';
 q_d_conj = quatconj(q_d);
 
 w_d = [0, 0, 0]';
 
 %% FOR-END LOOP
-for i = 1:N+1,
+for i = 1:N+1
    t = (i-1)*h;                  % time
    
    [phi,theta,psi] = q2euler(q); % transform q to Euler angles
@@ -79,28 +83,24 @@ for i = 1:N+1,
    q_tilde = quatmultiply(q_d_conj(i,:), q');
    e_tilde = q_tilde(2:4);
    %tau = -K_d * w - k_p * e_tilde';
-   %tracking_error(i,:) = e_tilde;
    
    % Control law for problem 1.6 (angular velocity)
    T_euler_inv = [1, 0, -sin(theta);
                   0, cos(phi), cos(theta) * sin(phi);
                   0, -sin(phi), cos(theta) * cos(phi)];
-%   euler_ang_d = T_euler_inv \ w;
-   q_dot = J2*w;                        % quaternion kinematics
-   q_dot_norm = norm(q_dot);
-   euler_ang_d = [0, 0, 0]';
-   if q_dot_norm ~= 0,
-     euler_ang_d = q2euler((q_dot)/norm(q_dot));
-   end
+
+   % Since euler_ang is defined explicitly and in simple closed form, we
+   % can manually time differentiate each term to get euler_ang_d without
+   % much effort.
+   dTheta_d = [0,  -T_e2*A_e2*sin(T_e2*t), T_e3*A_e3*cos(T_e3*t)];
    
-   w_d = T_euler_inv * euler_ang_d;
-   A = w - w_d
-   i
+   w_d = T_euler_inv * dTheta_d';
    tau = -K_d * (w - w_d) - k_p * e_tilde';
-   tracking_error(i,:) = e_tilde;
-   ref_signal(i,:) = euler_ang_d;
    
-   %q_dot = J2*w;                        % quaternion kinematics
+   tracking_error(i,:) = e_tilde;
+   ref_signal(i,:) = dTheta_d;
+   
+   q_dot = J2*w;                        % quaternion kinematics
    w_dot = I_inv*(Smtrx(I*w)*w + tau);  % rigid-body kinetics
    
    table(i,:) = [t q' phi theta psi w' tau'];  % store data in table
