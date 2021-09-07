@@ -120,16 +120,14 @@ end
 %% PLOT FIGURES
 t       = table(:,1);  
 q       = table(:,2:5); 
-phi     = rad2deg*table(:,6);
-theta   = rad2deg*table(:,7);
-psi     = rad2deg*table(:,8);
+euler   = rad2deg*table(:,6:8);
 w       = rad2deg*table(:,9:11);  
 tau     = table(:,12:14);
 
 e_tilde = tracking_error(:,1:3) .* rad2deg;
 
 figure(1);
-brg_plot(t, [phi theta psi]);
+brg_plot(t, euler);
 grid on;
 legend('\phi', '\theta', '\psi');
 title('Euler angles');
