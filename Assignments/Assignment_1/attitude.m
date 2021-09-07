@@ -128,61 +128,40 @@ tau     = table(:,12:14);
 
 e_tilde = tracking_error(:,1:3) .* rad2deg;
 
-
-figure (1); clf;
-hold on;
-plot(t, phi, 'b');
-plot(t, theta, 'r');
-plot(t, psi, 'g');
-hold off;
+figure(1);
+brg_plot(t, [phi theta psi]);
 grid on;
 legend('\phi', '\theta', '\psi');
 title('Euler angles');
 xlabel('time [s]'); 
 ylabel('angle [deg]');
 
-figure (2); clf;
-hold on;
-plot(t, w(:,1), 'b');
-plot(t, w(:,2), 'r');
-plot(t, w(:,3), 'g');
-hold off;
+figure(2);
+brg_plot(t, w);
 grid on;
 legend('p', 'q', 'r');
 title('Angular velocities');
 xlabel('time [s]'); 
 ylabel('angular rate [deg/s]');
 
-figure (3); clf;
-hold on;
-plot(t, tau(:,1), 'b');
-plot(t, tau(:,2), 'r');
-plot(t, tau(:,3), 'g');
-hold off;
+figure(3);
+brg_plot(t, tau);
 grid on;
 legend('x', 'y', 'z');
 title('Control input');
 xlabel('time [s]'); 
 ylabel('input [Nm]');
 
-figure (4); clf;
-hold on;
-plot(t, e_tilde(:,1), 'b');
-plot(t, e_tilde(:,2), 'r');
-plot(t, e_tilde(:,3), 'g');
-hold off;
+figure(4);
+brg_plot(t, e_tilde);
 grid on;
 legend('e_1', 'e_2', 'e_3');
 title('Tracking error - epsilon');
 xlabel('time [s]'); 
 ylabel('angle [deg]');
 
-figure (5); clf;
-hold on;
-plot(t, ref_signal(:,1), 'b');
-plot(t, ref_signal(:,2), 'r');
-plot(t, ref_signal(:,3), 'g');
-hold off;
+figure(5);
+brg_plot(t, ref_signal);
 grid on;
 legend('e_1', 'e_2', 'e_3');
 title('Reference signal');
@@ -191,4 +170,12 @@ ylabel('angle [deg]');
 
 function tau = control_law(e, w, K_d, k_p)
     tau = - K_d * w - k_p * e;
+end
+
+function brg_plot(t, v)
+    hold on;
+    plot(t, v(:,1), 'b');
+    plot(t, v(:,2), 'r');
+    plot(t, v(:,3), 'g');
+    hold off;
 end
