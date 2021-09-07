@@ -26,7 +26,7 @@ close all;
 
 %% USER INPUTS
 h = 0.1;                     % sample time (s)
-N  = 5000;                    % number of samples. Should be adjusted
+N = 1000;                    % number of samples. Should be adjusted
 
 % Model parameters
 m = 180;
@@ -67,8 +67,10 @@ euler_dot_d = [0 * t * deg2rad;
                -1.5 * sin(0.1 * t) * deg2rad;
                0.5 * cos(0.05 * t) * deg2rad];
 
-eta_t = sqrt(phi_t.^2 + theta_t.^2 + psi_t.^2);
+eta_t = sqrt(1 - phi_t.^2 - theta_t.^2 - psi_t.^2);
 
+%q_d = cell2mat(arrayfun(@(phi, theta, psi) euler2q(phi, theta, psi), ...
+%    phi_t, theta_t, psi_t, 'UniformOutput', false))';
 q_d = [eta_t; phi_t; theta_t; psi_t]';
 q_d_conj = quatconj(q_d);
 
@@ -105,7 +107,7 @@ for i = 1:N+1,
     tau = control_law(e_tilde', w_tilde, K_d, k_p);
    
     %q_dot = J2*w;                        % quaternion kinematics
-    w_dot = I_inv*(Smtrx(I*w)*w + tau);  % rigid-body kinetics
+    w_dot = I\(Smtrx(I*w)*w + tau);  % rigid-body kinetics
    
     table(i,:) = [t q' phi theta psi w' tau'];  % store data in table
    
