@@ -20,19 +20,24 @@
 % Author:                   2018-08-15 Thor I. Fossen and Håkon H. Helgesen
 
 %%
-clear;
-clc;
-close all;
+%clear;
+%clc;
+%close all;
 
 %% USER INPUTS
 h = 0.1;                     % sample time (s)
-N = 1000;                    % number of samples. Should be adjusted
+N = 5000;                    % number of samples. Should be adjusted
 
 % Model parameters
 m = 180;
 r = 2;
 I = m*r^2*eye(3);            % inertia matrix
 I_inv = inv(I);
+
+% Control law
+k_p = 20;
+k_d = 400;
+K_d = k_d * eye(3);
 
 % Constants
 deg2rad = pi/180;   
@@ -45,76 +50,51 @@ psi = -20*deg2rad;
 q = euler2q(phi,theta,psi);   % transform initial Euler angles to q
 
 w = [0 0 0]';                 % initial angular rates
-
-table = zeros(N+1,14);        % memory allocation
-tracking_error = zeros(N+1, 3);
-ref_signal = zeros(N+1, 3);
-
-% Control law
-k_p = 20;
-k_d = 400;
-
-K_d = k_d * eye(3);
-
-% Desired system state
-t = 1:N + 1;
-phi_t = 0 * t * deg2rad;
-theta_t = 15 * cos(0.1 * t) * deg2rad;
-psi_t = 10 * sin(0.05 * t) * deg2rad;
-
-euler_d = [phi_t; theta_t; psi_t];
-euler_dot_d = [0 * t * deg2rad;
-               -1.5 * sin(0.1 * t) * deg2rad;
-               0.5 * cos(0.05 * t) * deg2rad];
-
-eta_t = sqrt(1 - phi_t.^2 - theta_t.^2 - psi_t.^2);
-
-%q_d = cell2mat(arrayfun(@(phi, theta, psi) euler2q(phi, theta, psi), ...
-%    phi_t, theta_t, psi_t, 'UniformOutput', false))';
-q_d = [eta_t; phi_t; theta_t; psi_t]';
-q_d_conj = quatconj(q_d);
-
 w_d = [0, 0, 0]';
 
+table = zeros(N+1,20);        % memory allocation
+task = "1.6";
 %% FOR-END LOOP
-for i = 1:N+1,
+for i = 1:N+1
     t = (i-1)*h;                  % time
    
     [phi,theta,psi] = q2euler(q); % transform q to Euler angles
     [J,J1,J2] = quatern(q);       % kinematic transformation matrices
-   
-    q_dot = J2*w;                        % quaternion kinematics
-   
-    e = q(2:4);
     
-    q_tilde = quatmultiply(q_d_conj(i,:), q');
+    phi_d   = 0;
+    theta_d = 15 * cos(0.1  * t) * deg2rad;
+    psi_d   = 10 * sin(0.05 * t) * deg2rad;
+    
+    dTheta_d = [0;
+               -1.5 * sin(0.1  * t) * deg2rad;
+                0.5 * cos(0.05 * t) * deg2rad];
+        
+    q_d     = euler2q(phi_d, theta_d, psi_d);
+    q_d_bar = quatconj(q_d');
+ 
+    q_tilde = quatmultiply(q_d_bar, q');
     e_tilde = q_tilde(2:4);
-    tracking_error(i,:) = e_tilde;
+   
+    % Control law
+    switch task
+        case "1.2"
+            tau = control_law(e, w, K_d, k_p);
+        case "1.5"
+            tau = control_law(e_tilde', w, K_d, k_p);
+        case "1.6"
+            w_tilde = w - Tzyx(phi_d, theta_d) \ dTheta_d;
+            tau = control_law(e_tilde', w_tilde, K_d, k_p);
+    end
+
+    table(i,:) = [t q' phi theta psi w' tau' phi_d theta_d psi_d e_tilde];  % store data in table
     
-    T_euler_inv = [1, 0, -sin(theta);
-              0, cos(phi), cos(theta) * sin(phi);
-              0, -sin(phi), cos(theta) * cos(phi)];
-    
-    % Control law for problem 1.2
-    tau = control_law(e, w, K_d, k_p);
-   
-    % Control law for problem 1.5 and 1.6 (quaternion)
-    tau = control_law(e_tilde', w, K_d, k_p);
-   
-    % Control law for problem 1.6 (angular velocity)
-    w_d = T_euler_inv * euler_dot_d(:,i);
-    w_tilde = w - w_d;
-    tau = control_law(e_tilde', w_tilde, K_d, k_p);
-   
-    %q_dot = J2*w;                        % quaternion kinematics
+    q_dot = J2*w;                    % quaternion kinematics
     w_dot = I\(Smtrx(I*w)*w + tau);  % rigid-body kinetics
-   
-    table(i,:) = [t q' phi theta psi w' tau'];  % store data in table
-   
+    
     q = q + h*q_dot;	             % Euler integration
     w = w + h*w_dot;
-   
-    q  = q/norm(q);               % unit quaternion normalization
+    
+    q  = q/norm(q);                  % unit quaternion normalization
 end 
 
 %% PLOT FIGURES
@@ -123,16 +103,35 @@ q       = table(:,2:5);
 euler   = rad2deg*table(:,6:8);
 w       = rad2deg*table(:,9:11);  
 tau     = table(:,12:14);
-
-e_tilde = tracking_error(:,1:3) .* rad2deg;
+euler_d = rad2deg*table(:,15:17);
+e_tilde = rad2deg*table(:, 18:20);
 
 figure(1);
-brg_plot(t, euler);
-grid on;
-legend('\phi', '\theta', '\psi');
-title('Euler angles');
-xlabel('time [s]'); 
-ylabel('angle [deg]');
+subplot(3, 1, 1);
+    hold on;
+    plot(t, euler(:,1), 'b');
+    plot(t, euler_d(:,1), 'b--');
+    hold off;
+    legend('\phi', '\phi_d');
+    grid on;
+    title('Euler angles');
+subplot(3, 1, 2);
+    hold on;
+    plot(t, euler(:,2), 'r');
+    plot(t, euler_d(:,2), 'r--');
+    hold off;
+    legend('\theta', '\theta_d');
+    grid on;
+    ylabel('angle [deg]');
+subplot(3, 1, 3);
+    hold on;
+    plot(t, euler(:,3), 'g');
+    plot(t, euler_d(:,3), 'g--');
+    hold off;
+    legend('\psi', '\psi_d');
+    grid on;
+    xlabel('time [s]'); 
+
 
 figure(2);
 brg_plot(t, w);
@@ -150,6 +149,7 @@ title('Control input');
 xlabel('time [s]'); 
 ylabel('input [Nm]');
 
+
 figure(4);
 brg_plot(t, e_tilde);
 grid on;
@@ -159,9 +159,9 @@ xlabel('time [s]');
 ylabel('angle [deg]');
 
 figure(5);
-brg_plot(t, ref_signal);
+brg_plot(t, euler_d);
 grid on;
-legend('e_1', 'e_2', 'e_3');
+legend('phi', 'theta', 'psi');
 title('Reference signal');
 xlabel('time [s]'); 
 ylabel('angle [deg]');
