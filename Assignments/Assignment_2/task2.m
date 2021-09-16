@@ -68,7 +68,7 @@ p = 0;
 phi_ref = 0; 
 delta_a_ref = 0; 
 
-chi_ref = zeros(N+1, 3);
+chi_ref = zeros(N+1, 1);
 chi_ref(N/5:N/2) = 15*deg2rad;
 chi_ref(N/2+1:N+1) = -15*deg2rad;
 
@@ -79,7 +79,10 @@ table = zeros(N+1,4); % chi, phi, delta_a, p
 %% Simulation loop
 
 for i = 1:N+1,
-    dt = (i-1)*h;                 
+    dt = (i-1)*h; 
+    
+    % Transforming to 0-360 deg
+    chi = ssa(chi);
     
     % Limit the gain in delta_a
     if(abs(delta_a)*rad2deg >= delta_a_max)
@@ -87,9 +90,9 @@ for i = 1:N+1,
     end
      
     % Calculate system states
-    e_chi = chi_ref(i) - chi;
+    e_chi = ssa(chi_ref(i) - chi);
     phi_ref = k_p_chi*e_chi + k_i_chi*e_chi_int;
-    e_phi = phi_ref - phi;
+    e_phi = ssa(phi_ref - phi);
     delta_a_ref = e_phi*k_p_phi + k_d_phi*p;
     
     % Calculate the differential equations
