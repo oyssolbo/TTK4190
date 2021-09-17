@@ -74,7 +74,7 @@ chi_ref(N/2+1:N+1) = -15*deg2rad;
 
 e_chi_int = 0; % The integrator for chi
 %% Memory allocation
-table = zeros(N+1,4); % chi, phi, delta_a, p       
+table = zeros(N+1,5); % chi, phi, delta_a, p , phi_ref      
 
 %% Simulation loop
 
@@ -103,7 +103,7 @@ for i = 1:N+1,
     e_chi_int_dot = e_chi;
     
     % Store values of step i
-    table(i,:) = [chi phi delta_a p]; 
+    table(i,:) = [chi phi delta_a p phi_ref]; 
     
     % Calculate values for i+1
     chi = chi + h*chi_dot;
@@ -118,13 +118,15 @@ chi       = rad2deg*table(:,1);
 phi       = rad2deg*table(:,2); 
 delta_a   = rad2deg*table(:,3);
 p         = rad2deg*table(:,4);
+phi_ref   = rad2deg*table(:,5);
 
 figure (1); clf;
 hold on;
 plot(t, phi);
+plot(t, phi_ref);
 hold off;
 grid on;
-legend('\phi');
+legend('\phi', '\phi_{ref}');
 title('Roll');
 xlabel('Time [s]'); 
 ylabel('Angle [deg]');
@@ -132,9 +134,10 @@ ylabel('Angle [deg]');
 figure (2); clf;
 hold on;
 plot(t, chi);
+plot(t, chi_ref*rad2deg);
 hold off;
 grid on;
-legend('\chi');
+legend('\chi', '\chi_{ref}');
 title('Course');
 xlabel('Time [s]'); 
 ylabel('Angle [deg]');
