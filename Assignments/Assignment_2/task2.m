@@ -70,7 +70,8 @@ delta_a_ref = 0;
 
 chi_ref = zeros(N+1, 1);
 chi_ref(N/5:N/2) = 15*deg2rad;
-chi_ref(N/2+1:N+1) = -15*deg2rad;
+chi_ref(N/2+1:floor(2*N/3)) = 0;
+chi_ref(floor(2*N/3)+1:N+1) = -15*deg2rad;
 
 e_chi_int = 0; % The integrator for chi
 %% Memory allocation
