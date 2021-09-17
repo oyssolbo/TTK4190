@@ -20,7 +20,7 @@ clc;
 close all;
 
 %% Simulation time
-h = 0.1;                     % sample time (s)
+h = 0.001;                     % sample time (s)
 N  = 5000;                   % number of samples. Should be adjusted
 t = 1:N+1;
 
@@ -53,6 +53,7 @@ C_c = [1 0 0 0 0;
    
 D_c = zeros(4,1);
 
+%{
 % Dicretization
 sysc = ss(A_c, B_c, C_c, D_c);
 sysd = c2d(sysc, h);
@@ -60,7 +61,7 @@ sysd = c2d(sysc, h);
 % Discrete models
 A_d = sysd.A;
 B_d = sysd.B;
-
+%}
 
 %% Model parameters
 V_g = 540/3.6; % SOG (assuming V_w = 0) in m/s
@@ -133,13 +134,13 @@ for i = 1:N+1,
     % Calculate the differential equations
     chi_dot = g/V_g*tan(x(2))*cos(chi-x(2)) + d_chi;
     e_chi_int_dot = e_chi;
-    x_dot = A_d*x + B_d*delta_a_ref;
+    x_dot = A_c*x + B_c*delta_a_ref;
     
     % Store values of step i
     table(i,:) = [chi x(2) x(5) x(3) phi_ref]; 
     
     % Calculate values for i+1
-    x = x + x_dot;
+    x = x + h*x_dot;
     chi = chi + h*chi_dot;
     e_chi_int = e_chi_int + h*e_chi_int_dot;
 end 
