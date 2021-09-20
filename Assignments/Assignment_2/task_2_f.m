@@ -31,14 +31,14 @@ rad2deg = 180/pi;
 g = 9.81;
 
 %% System
-% x = [beta, phi, p, r, delta_a]^T
+% x = [chi, beta, phi, p, r, delta_a]^T
 
 % Countinous models
-A_c = [ -0.322  0.052  0.028 -1.12   0.002;
-         0      0      1     -0.001  0;
-       -10.6    0     -2.87   0.46  -0.65;
-         6.87   0     -0.04  -0.32  -0.02;
-         0      0      0      0     -7.5];
+A_c = [-0.322   0.052   0.028  -1.12    0.002;
+        0       0       1      -0.001   0;
+      -10.6     0      -2.87    0.46   -0.65;
+        6.87    0      -0.04   -0.32   -0.02;
+        0       0       0       0      -7.5];
    
 B_c = [0;
        0;
@@ -52,16 +52,6 @@ C_c = [1 0 0 0 0;
        0 0 0 1 0];
    
 D_c = zeros(4,1);
-
-%{
-% Dicretization
-sysc = ss(A_c, B_c, C_c, D_c);
-sysd = c2d(sysc, h);
-
-% Discrete models
-A_d = sysd.A;
-B_d = sysd.B;
-%}
 
 %% Model parameters
 V_g = 540/3.6; % SOG (assuming V_w = 0) in m/s
@@ -93,9 +83,9 @@ k_i_chi = w_n_chi^2*V_g/g;
 d_chi = 1.5*deg2rad;
 
 %% Initial and reference values
-chi = 350*deg2rad;
+chi_0 = ssa(350)*deg2rad;
 beta = 0;
-phi = -10*deg2rad;
+phi = ssa(-10)*deg2rad;
 p = 0; 
 r = 0;
 delta_a = 0;
@@ -108,12 +98,21 @@ chi_ref(N/2+1:floor(2*N/3)) = 0;
 chi_ref(floor(2*N/3)+1:N+1) = -15*deg2rad;
 %chi_ref(N/2+1:N+1) = -15*deg2rad; % Testing purposes only
 
+% Creating a time-series
+chi_ref_ts = timeseries(chi_ref, t);
+
+% Trying to circumwent problems with timeseries
+chi_ref_step = [zeros(1,N/5) 15*ones(1,N/2-N/5)*deg2rad zeros(1,floor(2/3*N)-N/2) -15*ones(1,N-floor(2/3*N))*deg2rad];
+chi_ref_step = [zeros(1,10), 15*deg2rad*ones(1,10), zeros(1,10), -15*deg2rad*ones(1,10)];
 e_chi_int = 0; % The integrator for chi
 %% Memory allocation
-table = zeros(N+1,5); % chi, phi, delta_a, p , phi_ref      
+table = zeros(N+1,5); % chi, phi, delta_a, p , phi_ref   
+
+sim("simulink_2f.slx");
+load("simulation_results.mat");
 
 %% Simulation loop
-
+%{
 for i = 1:N+1,
     dt = (i-1)*h; 
     
@@ -144,13 +143,18 @@ for i = 1:N+1,
     chi = chi + h*chi_dot;
     e_chi_int = e_chi_int + h*e_chi_int_dot;
 end 
+%}
+
+%% Run simulink simulation
 
 %% PLOT FIGURES
-chi       = rad2deg*table(:,1);  
-phi       = rad2deg*table(:,2); 
-delta_a   = rad2deg*table(:,3);
-p         = rad2deg*table(:,4);
-phi_ref   = rad2deg*table(:,5);
+t         = ans(1,:);
+chi       = rad2deg*ans(2,:);  
+phi       = rad2deg*ans(3,:); 
+delta_a   = rad2deg*ans(4,:);
+p         = rad2deg*ans(5,:);
+phi_ref   = rad2deg*ans(6,:);
+chi_ref   = ans(7,:);
 
 figure (1); clf;
 hold on;
