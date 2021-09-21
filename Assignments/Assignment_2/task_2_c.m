@@ -13,18 +13,20 @@ K_p = delta_max / e_max * sign(a_phi_2);
 w_n = sqrt(abs(a_phi_2) * delta_max / e_max);
 K_d = (2 * zeta * w_n - a_phi_1) / a_phi_2;
 
-% num = a_phi_2*K_p*s + K_i;
-% den = s^3 + (a_phi_1+a_phi_2*K_d)*s^2 + a_phi_2*K_p*s + K_i*a_phi_2;  
-
-%sys = num / den;
-%sys = tf([a_phi_2*K_p K_i],[1 a_phi_1+a_phi_2*K_d a_phi_2*K_p K_i*a_phi_2])
-
 % Rewriting into Evans form
-sys = tf([a_phi_2], [1 a_phi_1+a_phi_2*K_d a_phi_2*K_p 0])
+sys = tf([a_phi_2], [1 a_phi_1+a_phi_2*K_d a_phi_2*K_p 0]);
 
-rlocus(sys, [-3.2:0.1:0]);
+K_min = -3.2;
+K_max = 0;
+dk = 0.1;
+K = [K_min:dk:K_max];
 
-% Can see that approximating Ki in range [-3.2, 0] is required for
-% the system to be stable AKA have poles in the left half plane
+%h = rlocus(sys,K);
+%p = getoptions(h);
+%p.Title.String = 'Locus plot for K = [-3.2, 0]';
+%setoptions(h, p);
 
-
+rlocus_handle = rlocusplot(sys, K);
+rlocus_opt = getoptions(rlocus_handle);
+rlocus_opt.Title.String = 'Locus plot for K = [-3.2, 0]';
+setoptions(rlocus_handle, rlocus_opt);

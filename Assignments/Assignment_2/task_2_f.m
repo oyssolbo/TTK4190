@@ -103,7 +103,7 @@ chi_ref_ts = timeseries(chi_ref, t);
 
 % Trying to circumwent problems with timeseries
 chi_ref_step = [zeros(1,N/5) 15*ones(1,N/2-N/5)*deg2rad zeros(1,floor(2/3*N)-N/2) -15*ones(1,N-floor(2/3*N))*deg2rad];
-chi_ref_step = [zeros(1,10), 15*deg2rad*ones(1,10), zeros(1,10), -15*deg2rad*ones(1,10)];
+chi_ref_step = [zeros(1,9), 15*deg2rad*ones(1,9), zeros(1,0), -15*deg2rad*ones(1,9)];
 e_chi_int = 0; % The integrator for chi
 %% Memory allocation
 table = zeros(N+1,5); % chi, phi, delta_a, p , phi_ref   
@@ -184,7 +184,7 @@ plot(t, delta_a);
 hold off;
 grid on;
 legend('\delta_a');
-title('Rudder input');
+title('Aileron input');
 xlabel('Time [s]'); 
 ylabel('Angle [deg]');
 
