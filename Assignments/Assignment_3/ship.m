@@ -54,6 +54,18 @@ T_6 = 10;               % Time constant yaw
 delta_max  = 40 * pi/180;        % Max rudder angle      (rad)
 Ddelta_max = 5  * pi/180;        % Max rudder derivative (rad/s)
 
+%% Environment
+v_c_b = [0; 0; 0];
+u_c = v_c_b(1);
+v_c = v_c_b(2);
+
+%% Relative velocities
+u_r = nu(1) - u_c;
+v_r = nu(2) - v_c;
+r_r = nu(3);
+
+w_nb_b = [0, 0, 0];
+
 %% Mass matrix
 % Added mass matrix
 Xudot = -8.9830e5;
@@ -87,32 +99,32 @@ Bi = [(1-t_thr),  X_delta2;
     
 %% Coreolis and centripetal matrix
 % Rigid body coreolis matrix
-C_RB = m * nu(3) * [0 -1 -xg; 
-                    1  0  0;
-                    xg 0  0];
+C_RB = m * r_r * [0 -1 -xg; 
+                  1  0  0;
+                  xg 0  0];
 
 % Hydrodynamic coreolis matrix for ALL states
 C_A_11 = zeros(3);
-C_A_12 = Smtrx([Xudot*nu(1); Yvdot*nu(2)+Yrdot*nu(3); 0]);
+C_A_12 = -Smtrx([-Xudot*u_r; -Yvdot*v_r-Yrdot*r_r; 0]);
 C_A_21 = C_A_12;
-C_A_22 = Smtrx([0; 0; Nvdot*nu(2) + Nrdot*nu(3)]);
+C_A_22 = -Smtrx([0; 0; -Nvdot*v_r - Nrdot*r_r]);
 
 % Hydrodynamic corelois matrix for DOF 1,2,6
 C_A = [C_A_11(1:2,1:2), C_A_12(1:2,3);
        C_A_21(3,1:2),   C_A_22(3,3)];
-
+                    
 % Coreolis and centripetal matrix according to 6.104
 C = C_A + C_RB;
-
+                    
 %% Damping
 % Linear damping
 Xu = -(m - Xudot)/T_1;
 Yv = -(m - Yvdot)/T_2;
 Nr = -(Iz - Nrdot)/T_6;
 
-D = [Xu, 0,  0;
-     0,  Yv, 0;
-     0,  0,  Nr];
+D = -[Xu, 0,  0;
+      0,  Yv, 0;
+      0,  0,  Nr];
 
 % Nonlinear drag in surge
 S = 2*T*L + 2*B*T + B*L; % Wetted surface of the hull (sides + keel)
@@ -121,11 +133,10 @@ epsilon = 0.001;
 C_R = 0;
 
 L_pp = L; % Characteristic linear dimension (length of the ship) 
-% abs(nu(1)) gets fucked when surge speed explodes
-R_n = L_pp*1e6*abs(nu(1));
+R_n = L_pp*1e6*abs(u_r);
 C_f = 0.075/((log10(R_n) - 2)^2 + epsilon) + C_R;
 
-D_X = -1/2*rho*S*(1+k)*C_f*abs(nu(1))*nu(1);
+X_n = -1/2*rho*S*(1+k)*C_f*abs(nu(1))*nu(1);
 
 % Cross-flow drag
 num_strips = 10;
@@ -135,14 +146,13 @@ Cd_2D = Hoerner(B,T);
 Ycf = 0; % Initial cross-flow drag in Y
 Ncf = 0; % Initial cross-flow drag in N
 
-v_r = nu(2);
 for xL = -L/2:dx:L/2,
-    Ucf = abs(v_r + xL*nu(3)) * (v_r + xL*nu(3));
+    Ucf = abs(v_r + xL*nu(3))*(v_r + xL*nu(3));
     Ycf = Ycf - 0.5*rho*T*Cd_2D*Ucf*dx;    % Sway force
     Ncf = Ncf - 0.5*rho*T*Cd_2D*xL*Ucf*dx; % Yaw moment
 end
 
-D_n = [D_X, 0,   0; 
+D_n = [X_n, 0,   0; 
        0,   Ycf, 0;
        0,   0,   Ncf];
 
@@ -158,6 +168,8 @@ thr = rho * Dia^4 * KT * abs(n) * n;    % Thrust command (N)
 %% Ship dynamics
 u = [ thr delta ]';
 tau = Bi * u;
+% Must also add the effect from the current into the expression for a 
+% total (but equivalent since v_c_b = 0) expression
 nu_dot = M \ (tau - C*nu - D*nu); % M_inv * (tau - C_RB * nu); 
 eta_dot = R * nu;    
 
