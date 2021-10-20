@@ -71,7 +71,6 @@ MRB = [ m 0    0
         0 m*xg Iz ];
 
 M = MRB + M_A;
-Minv = inv(M);
 
 % input matrix
 t_thr = 0.05;           % thrust deduction number
@@ -125,8 +124,8 @@ epsilon = 0.001;
 k = 0.1;
 S = L*B + 2*B*T + 2*L*T;
 
-R_n = @(u) L/nu_c *abs(u);
-C_f = 0.075/((log10(R_n(u_r)) - 2)^2 + epsilon);
+R_n = L/nu_c * abs(u_r);
+C_f = 0.075/((log10(R_n) - 2)^2 + epsilon);
 
 Xn = 0.5*rho*S*(1+k)*C_f*abs(u_r)*u_r;
 
@@ -147,7 +146,7 @@ for xL = -L/2:dx:L/2
 end
 
 % Final nonlinear damping
-Dn = diag([Xn Ycf Ncf]);
+X = diag([Xn Ycf Ncf]);
 
 R = Rzyx(0,0,eta(3));
 
@@ -157,7 +156,7 @@ thr = rho * Dia^4 * KT * abs(n) * n;    % thrust command (N)
 % ship dynamics
 u = [ thr delta ]';
 tau = Bi * u;
-nu_dot = Minv * (tau - C * nu - D*nu - Dn*nu); 
+nu_dot = M \ (tau - C * nu - D*nu - X*nu); 
 eta_dot = R * nu;    
 
 % Rudder saturation and dynamics (Sections 9.5.2)
