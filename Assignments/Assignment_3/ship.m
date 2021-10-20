@@ -91,7 +91,7 @@ CRB = m * nu(3) * [ 0 -1 -xg
 % Add Coriolis due to added mass here
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 a1 = Xudot*x(1);
-a2 = Yvdot*x(2);
+a2 = Yvdot*x(2) + Yrdot*x(3);
 
 C_A = [  0  0  a2;
          0  0 -a1;
@@ -128,7 +128,7 @@ S = L*B + 2*B*T + 2*L*T;
 R_n = @(u) L/nu_c *abs(u);
 C_f = 0.075/((log10(R_n(u_r)) - 2)^2 + epsilon);
 
-Xn = -0.5*rho*S*(1+k)*C_f*abs(u_r)*u_r;
+Xn = 0.5*rho*S*(1+k)*C_f*abs(u_r)*u_r;
 
 % Cross-flow drag
 v_c = 0;
@@ -147,7 +147,7 @@ for xL = -L/2:dx:L/2
 end
 
 % Final nonlinear damping
-Dn = -diag([Xn -Ycf -Ncf]);
+Dn = diag([Xn Ycf Ncf]);
 
 R = Rzyx(0,0,eta(3));
 
