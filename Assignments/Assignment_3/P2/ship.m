@@ -1,4 +1,5 @@
-function [xdot,u] = ship(x,u,nu_c,tau_ext)
+function [xdot,u] = ship(x,u,nu_c,tau_ext, U_ref)
+%% Information
 % [xdot,u] = ship(x,u,nu_c,tau_ext) returns the time derivative of the state vector: 
 % x = [ u v r x y psi delta n ]' for a ship with L = 161 m where:
 %
@@ -27,14 +28,16 @@ function [xdot,u] = ship(x,u,nu_c,tau_ext)
 %
 % The external environmental force vector is denoted by tau_ext
 %
-% Author:    name
-% Date:      date
+% Author:           Solbø, Ø. & Strøm, C.
+% Study program:    MTTK
+% Date:             October 2021
 
+%% Assertion
 % Check of input and state dimensions
 if (length(x)~= 8),error('x-vector must have dimension 8 !');end
 if (length(u)~= 2),error('u-vector must have dimension 2 !');end
 
-% Dimensional states and input
+%% Dimensional states and input
 delta_c = u(1); 
 n_c     = u(2);
 
@@ -47,36 +50,41 @@ nu_r = nu - nu_c;
 uc = nu_c(1);
 vc = nu_c(2);
 
-% ship parameters 
-m = 17.0677e6;          % mass (kg)
-Iz = 2.1732e10;         % yaw moment of inertia (kg m^2)
+%% Ship parameters 
+m = 17.0677e6;          % Mass (kg)
+Iz = 2.1732e10;         % Yaw moment of inertia (kg m^2)
 xg = -3.7;              % CG x-ccordinate (m)
-L = 161;                % length (m)
-B = 21.8;               % beam (m)
-T = 8.9;                % draft (m)
-KT = 0.7;               % propeller coefficient (-)
-Dia = 3.3;              % propeller diameter (m)
-rho = 1025;             % density of water (m/s^3)
+L = 161;                % Length (m)
+B = 21.8;               % Beam (m)
+T = 8.9;                % Draft (m)
+KT = 0.7;               % Propeller coefficient (-)
+Dia = 3.3;              % Propeller diameter (m)
+rho = 1025;             % Density of water (m/s^3)
 
-% rudder limitations
-delta_max  = 40 * pi/180;        % max rudder angle      (rad)
-Ddelta_max = 5  * pi/180;        % max rudder derivative (rad/s)
+% Rudder limitations
+delta_max  = 40 * pi/180;        % Max rudder angle      (rad)
+Ddelta_max = 5  * pi/180;        % Max rudder derivative (rad/s)
 
-% added mass matrix
+%% Mass matrix
+% Added mass matrix
 Xudot = -8.9830e5;
 Yvdot = -5.1996e6;
 Yrdot =  9.3677e5;
 Nvdot =  Yrdot;
 Nrdot = -2.4283e10;
-MA = -[ Xudot 0 0; 0 Yvdot Yrdot; 0 Nvdot Nrdot ];
+M_A = -[Xudot,  0,     0; 
+        0,     Yvdot, Yrdot; 
+        0,     Nvdot, Nrdot];
 
-% rigid-body mass matrix
-MRB = [ m 0    0 
-        0 m    m*xg
-        0 m*xg Iz ];
-Minv = inv(MRB + MA);
+% Rigid-body mass matrix
+M_RB = [m,  0,    0; 
+        0,  m,   m*xg;
+        0, m*xg,  Iz];
+   
+% Total mass matrix
+M = M_RB + M_A;
 
-% rudder coefficients
+%% Rudder coefficients
 b = 2;
 AR = 8;
 CB = 0.8;
@@ -88,31 +96,36 @@ aH = 0.75;
 xH = -0.4 * L;
 xR = -0.5 * L;
 
-% input matrix
-t_thr = 0.05;                                        % thrust deduction number
-X_delta2 = 0.5 * (1 - tR) * rho * AR * CN;           % rudder coefficients (Section 9.5)
+%% Input matrix
+t_thr = 0.05;                                        % Thrust deduction number
+X_delta2 = 0.5 * (1 - tR) * rho * AR * CN;           % Rudder coefficients (Section 9.5)
 Y_delta = 0.25 * (1 + aH) * rho * AR * CN; 
 N_delta = 0.25 * (xR + aH*xH) * rho * AR * CN;   
 
-Bi = @(u_r,delta) [ (1-t_thr)  -u_r^2 * X_delta2 * delta
-                        0      -u_r^2 * Y_delta
-                        0      -u_r^2 * N_delta            ];
-    
-% state-dependent time-varying matrices
-CRB = m * nu_r(3) * [ 0 -1 -xg 
-                      1  0  0 
-                      xg 0  0  ];
+B_i = @(u_r,delta) [(1-t_thr), -u_r^2*X_delta2*delta;
+                      0,       -u_r^2*Y_delta;
+                      0,       -u_r^2*N_delta];
+   
+%% Centripetal Coreolis-matrices
+% Rigid-body Coreolis-matrix
+C_RB = m * nu_r(3) * [0, -1, -xg; 
+                      1,  0,  0; 
+                      xg, 0,  0];
 
-CA = [ 0 0 Yvdot*nu_r(2) + Yrdot*nu_r(3); 0 0 -Xudot*nu_r(1); -Yvdot*nu_r(2)-Yrdot*nu_r(3) Xudot*nu_r(1) 0];
+% Added mass Coreolis-matrix
+C_A = [             0,                   0,         Yvdot*nu_r(2) + Yrdot*nu_r(3); 
+                    0,                   0,                 -Xudot*nu_r(1); 
+      -Yvdot*nu_r(2)-Yrdot*nu_r(3), Xudot*nu_r(1),                0];
 
-% linear damping
+%% Damping
+% Linear damping
 T1 = 20; T2 = 20; T6 = 10;
 Xu = -(m-Xudot)/T1;
 Yv = -(m-Yvdot)/T2;
 Nr = -(Iz-Nrdot)/T6;
 D = -diag([Xu Yv Nr]);
 
-% nonlinear surge damping
+% Nonlinear surge damping
 eps = 0.001;
 CR = 0;
 k = 0.1;
@@ -122,25 +135,46 @@ Rn = L / v * abs(nu_r(1));
 Cf = 0.075 / (log10(Rn) - 2 + eps)^2 + CR;
 Xns = -0.5*rho*S*(1+k)*Cf*abs(nu_r(1))*nu_r(1);
 
-% nonlinear cross-flow drag
+% Nonlinear cross-flow drag
 Cd_2d = Hoerner(B,T);
 dx = L/10;
 Ycf = 0; Ncf = 0;
 for xL = -L/2:dx:L/2
-Ucf = abs(nu_r(2) + xL * nu_r(3)) * (nu_r(2) + xL * nu_r(3));
-Ycf = Ycf - 0.5 * rho * T * Cd_2d * Ucf * dx;
-Ncf = Ncf - 0.5 * rho * T * Cd_2d * xL * Ucf * dx;
+    Ucf = abs(nu_r(2) + xL * nu_r(3)) * (nu_r(2) + xL * nu_r(3));
+    Ycf = Ycf - 0.5 * rho * T * Cd_2d * Ucf * dx;
+    Ncf = Ncf - 0.5 * rho * T * Cd_2d * xL * Ucf * dx;
 end
 d = -[Xns Ycf Ncf]';
 
-% thrust 
-thr = rho * Dia^4 * KT * abs(n) * n;    % thrust command (N)
+%% Linearized model using sway-yaw subsystem
+% Linear matrices
+C_RB_star = zeros(3);
+C_RB_star(2,3) = m*U_ref;
+C_RB_star(3,3) = m*U_ref*xg;
 
-% ship dynamics
+C_A_star = zeros(3);
+C_A_star(3,2) = -Yvdot*U_ref + Xudot*U_ref;
+C_A_star(2,3) = -Xudot*U_ref;
+C_A_star(3,3) = -Yrdot*U_ref;
+
+N = C_RB_star + C_A_star + D;
+b = 2*U_ref*[-Y_delta, -N_delta]';
+
+% Reducing down to sway-yaw subsystem
+N_lin = N(2:3,2:3);
+M_lin = M(2:3,2:3);
+
+% Transfer function
+[den, num] = ss2tf(-M_lin\N_lin, M_lin\b, [0, 1], 0);
+
+%% Thrust 
+thr = rho * Dia^4 * KT * abs(n) * n;    % Thrust command (N)
+
+%% Ship dynamics
 R = Rzyx(0,0,eta(3));
 u = [ thr delta ]';
-tau = Bi(nu_r(1),delta) * u;
-nu_dot = [nu(3)*vc -nu(3)*uc 0]' + Minv * (tau_ext + tau - (CRB + CA + D) * nu_r - d);
+tau = B_i(nu_r(1),delta) * u;
+nu_dot = [nu(3)*vc -nu(3)*uc 0]' + M \ (tau_ext + tau - (C_RB + C_A + D) * nu_r - d);
 eta_dot = R * nu;    
 
 % Rudder saturation and dynamics (Sections 9.5.2)
@@ -153,7 +187,7 @@ if abs(delta_dot) >= Ddelta_max
     delta_dot = sign(delta_dot)*Ddelta_max;
 end    
 
-% propeller dynamics
+% Propeller dynamics
 n_dot = (1/10) * (n_c - n);
 
 xdot = [nu_dot' eta_dot' delta_dot n_dot]';

@@ -1,58 +1,115 @@
 % Project in TTK4190 Guidance, Navigation and Control of Vehicles 
 %
-% Author:           My name
-% Study program:    My study program
+% Author:           Solbø, Ø. & Strøm, C.
+% Study program:    MTTK
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % USER INPUTS
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-h  = 0.1;    % sampling time [s]
-Ns = 10000;    % no. of samples
+h  = 0.1;               % Sampling time [s]
+Ns = 10000;             % Num samples
 
-psi_ref = 10 * pi/180;  % desired yaw angle (rad)
-U_ref   = 7;            % desired surge speed (m/s)
+psi_ref = 10 * pi/180;  % Desired yaw angle (rad)
+U_ref   = 7;            % Desired surge speed (m/s)
 
-% initial states
+% Initial states
 eta = [0 0 0]';
 nu  = [0.1 0 0]';
 delta = 0;
 n = 0;
 x = [nu' eta' delta n]';
 
+% External forces
+Vc = 0;
+beta_vc = deg2rad(45);
+
+% Wind-coefficients
+Vw = 10;
+beta_vw = deg2rad(135);
+rho_a = 1.247;
+cy = 0.95;
+cn = 0.15;
+Loa = 161;
+A_Lw = 10*Loa;
+
+% Controller-gains
+zeta = 1;
+w_b = 0.06;
+K = 2.0375;
+T = 174.66;
+
+m = 17.0677e6;
+
+w_n = 1/(sqrt(1-2*zeta^2 + sqrt(4*zeta^4 - 4*zeta^2 + 2)))*w_b;
+
+Kp = m*w_n^2;
+Kd = 2*zeta*w_n*m;
+Ki = w_n/10*Kp;
+
+% Reference model
+w_ref = 0.03;
+
+
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % MAIN LOOP
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-simdata = zeros(Ns+1,14);       % table of simulation data
+simdata = zeros(Ns+1,16);       % Table of simulation data
 
 for i=1:Ns+1
+    t = (i-1) * h;              % Time (s)
     
-    t = (i-1) * h;              % time (s)
-    
-    % current disturbance
-    uc = 0;
-    vc = 0;
+    % Current disturbance
+    uc = Vc*cos(beta_vc - x(6));
+    vc = Vc*sin(beta_vc - x(6));
     nu_c = [ uc vc 0 ]';
     
-    % wind disturbance
+    % Wind disturbance
     Ywind = 0;
     Nwind = 0;
+    if t >= 200,
+        u_rw = x(1) - Vw*cos(beta_vw - x(6));
+        v_rw = x(2) - Vw*sin(beta_vw - x(6));
+        V_rw = norm([u_rw, v_rw], 2);
+        gamma_rw = -atan2(u_rw, v_rw);
+        
+        dynamic_pressure = 1/2*rho_a*V_rw^2;
+        Ywind = dynamic_pressure*cy*sin(gamma_rw)*A_Lw;
+        Nwind = dynamic_pressure*cn*sin(2*gamma_rw)*A_Lw*Loa;
+    end
     tau_wind = [0 Ywind Nwind]';
     
-    % reference models
+    % Reference models
     psi_d = psi_ref;
     r_d = 0;
     u_d = U_ref;
         
-    % control law
-    delta_c = 0.1;              % rudder angle command (rad)
-    n_c = 10;                   % propeller speed (rps)
+    % Control law
+    e_psi = ssa(psi_d - x(6));
     
-    % ship dynamics
+    
+    
+    delta_c = 0.1;              % Rudder angle command (rad)
+    n_c = 10;                   % Propeller speed (rps)
+    
+    
+    % Ship dynamics
     u = [delta_c n_c]';
-    [xdot,u] = ship(x,u,nu_c,tau_wind);
+    [xdot,u] = ship(x,u,nu_c,tau_wind, U_ref);
     
-    % store simulation data in a table (for testing)
-    simdata(i,:) = [t x(1:3)' x(4:6)' x(7) x(8) u(1) u(2) u_d psi_d r_d];     
+    % Using equation 10.138, it is given that the body-velocities are
+    % calculated in the ship dynamics
+    % Calculating crab and sideslip based on this
+    crab = atan2(x(2), x(1));
+    
+    R = Rzyx(0, 0, x(6));
+    U_ned = R'*[x(1), x(2), 0]';
+    U_r = U_ned - [uc, vc, 0]';
+    u_r = U_r(1);
+    
+    sideslip = asin(u_r/norm(U_r, 2));
+    
+    % Store simulation data in a table (for testing)
+    simdata(i,:) = [t x(1:3)' x(4:6)' x(7) x(8) u(1) u(2) u_d psi_d r_d crab sideslip];     
  
     % Euler integration
     x = euler2(xdot,x,h);    
@@ -75,6 +132,8 @@ n_c     = 60 * simdata(:,11);           % rpm
 u_d     = simdata(:,12);                % m/s
 psi_d   = (180/pi) * simdata(:,13);     % deg
 r_d     = (180/pi) * simdata(:,14);     % deg/s
+crab    = (180/pi) * simdata(:,15);     % deg
+sideslip= (180/pi) * simdata(:,16);     % deg
 
 figure(1)
 figure(gcf)
@@ -99,3 +158,12 @@ title('Actual and commanded propeller speed (rpm)'); xlabel('time (s)');
 subplot(313)
 plot(t,delta,t,delta_c,'linewidth',2);
 title('Actual and commanded rudder angles (deg)'); xlabel('time (s)');
+
+figure(3)
+figure(gcf)
+subplot(211)
+plot(t,crab,'linewidth',2);
+title('Crab (deg)'); xlabel('time (s)');
+subplot(212)
+plot(t,sideslip,'linewidth',2);
+title('Sideslip (deg)'); xlabel('time (s)');
