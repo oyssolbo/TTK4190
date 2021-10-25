@@ -1,47 +1,58 @@
 % Project in TTK4190 Guidance, Navigation and Control of Vehicles 
 %
-% Author:           Solbø, Ø. & Strøm, C.
-% Study program:    MTTK
+% Author:           My name
+% Study program:    My study program
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % USER INPUTS
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-h  = 0.05;    % Sampling time [s]
-Ns = 1000;    % Num samples
+h  = 0.1;    % sampling time [s]
+Ns = 10000;    % no. of samples
 
-psi_ref = 10 * pi/180;  % Desired yaw angle (rad)
-u_ref   = 7;            % Desired surge speed (m/s)
+psi_ref = 10 * pi/180;  % desired yaw angle (rad)
+U_ref   = 7;            % desired surge speed (m/s)
 
-% Initial states
+% initial states
 eta = [0 0 0]';
-nu  = [0.1 0 0.1]';
+nu  = [0.1 0 0]';
 delta = 0;
 n = 0;
-x = [nu' eta' delta n];
+x = [nu' eta' delta n]';
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % MAIN LOOP
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-simdata = zeros(Ns+1,14);       % Table of simulation data
+simdata = zeros(Ns+1,14);       % table of simulation data
 
-for i=1:Ns+1  
+for i=1:Ns+1
+    
     t = (i-1) * h;              % time (s)
-  
-    % Reference models
+    
+    % current disturbance
+    uc = 0;
+    vc = 0;
+    nu_c = [ uc vc 0 ]';
+    
+    % wind disturbance
+    Ywind = 0;
+    Nwind = 0;
+    tau_wind = [0 Ywind Nwind]';
+    
+    % reference models
     psi_d = psi_ref;
     r_d = 0;
-    u_d = u_ref;
+    u_d = U_ref;
         
-    % Control law
+    % control law
     delta_c = 0.1;              % rudder angle command (rad)
     n_c = 10;                   % propeller speed (rps)
     
-    % Ship dynamics
+    % ship dynamics
     u = [delta_c n_c]';
-    xdot = ship(x,u);
+    [xdot,u] = ship(x,u,nu_c,tau_wind);
     
-    % Store simulation data 
-    simdata(i,:) = [t x(1:3) x(4:6) x(7) x(8) delta_c n_c u_d psi_d r_d];     
+    % store simulation data in a table (for testing)
+    simdata(i,:) = [t x(1:3)' x(4:6)' x(7) x(8) u(1) u(2) u_d psi_d r_d];     
  
     % Euler integration
     x = euler2(xdot,x,h);    
