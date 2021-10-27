@@ -33,22 +33,32 @@ Loa = 161;
 A_Lw = 10*Loa;
 
 % Controller-gains
-zeta = 1;
+zeta_PID = 1;
 w_b = 0.06;
 K = 2.0375;
 T = 174.66;
 
 m = 17.0677e6;
 
-w_n = 1/(sqrt(1-2*zeta^2 + sqrt(4*zeta^4 - 4*zeta^2 + 2)))*w_b;
+w_PID = 1/(sqrt(1-2*zeta_PID^2 + sqrt(4*zeta_PID^4 - 4*zeta_PID^2 + 2)))*w_b;
 
-Kp = m*w_n^2;
-Kd = 2*zeta*w_n*m;
-Ki = w_n/10*Kp;
+Kp = m*w_PID^2;
+Kd = 2*zeta_PID*w_PID*m;
+Ki = w_PID/10*Kp;
+
+% Rudder limitations
+rudder_max  = 40 * pi/180;        % Max rudder angle      (rad)
+d_rudder_max = 5  * pi/180;       % Max rudder derivative (rad/s)
 
 % Reference model
 w_ref = 0.03;
+zeta_ref = 1;
 
+psi_d = 0;
+r_d = 0;
+a_d = 0;
+
+e_psi_int = 0;
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % MAIN LOOP
@@ -78,17 +88,26 @@ for i=1:Ns+1
     end
     tau_wind = [0 Ywind Nwind]';
     
-    % Reference models
-    psi_d = psi_ref;
-    r_d = 0;
+    % Reference model - but what to do about the saturations?...
+    psi_d_dot = r_d;    % sat(r_d);
+    r_d_dot = a_d;      % sat(a_d);
+    a_d_dot = -(2*zeta_ref + 1)*w_ref*a_d - (2*zeta_ref + 1)*w_ref^2*r_d + w_ref^3*(psi_ref - psi_d);   % -(2*zeta_ref + 1)*w_ref*sat(a_d) - (2*zeta_ref + 1)*w_ref^2*sat(r_d) + w_ref^3*(psi_ref - psi_d);
+    
+    psi_d = psi_d + h*psi_d_dot;
+    r_d = r_d + h*r_d_dot;
+    a_d = a_d + h*a_d_dot;
+    
     u_d = U_ref;
-        
+    
     % Control law
     e_psi = ssa(psi_d - x(6));
+    e_r = ssa(r_d - x(3));
     
+    % No integral windup
+    e_psi_int_dot = e_psi;
+    e_psi_int = e_psi_int + h*e_psi_int_dot;
     
-    
-    delta_c = 0.1;              % Rudder angle command (rad)
+    delta_c = -Kp*e_psi - Kd*e_r - Ki*e_psi_int;
     n_c = 10;                   % Propeller speed (rps)
     
     
