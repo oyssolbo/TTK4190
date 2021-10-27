@@ -4,7 +4,9 @@
 % Study program:    MTTK
 
 clear all; close all;
-%% Input
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% USER INPUTS
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 h  = 0.1;               % Sampling time [s]
 Ns = 10000;             % Num samples
 
@@ -14,26 +16,14 @@ psi_ref = [psi_ref_init, psi_ref_end];
 psi_ref = 10 * pi/180;
 U_ref   = 7;            % Desired surge speed (m/s)
 
-%% Initial states
+% Initial states
 eta = [0 0 0]';
 nu  = [0.1 0 0]';
 delta = 0;
 n = 0;
 x = [nu' eta' delta n]';
 
-%% Ship coefficientc
-% Rudder limitations
-rudder_max  = 40 * pi/180;        % Max rudder angle      (rad)
-d_rudder_max = 5  * pi/180;       % Max rudder derivative (rad/s)
-
-Loa = 161;
-m = 17.0677e6;
-
-% First order Nomoto
-K = 0.0075;
-T = 169.5493;
-
-%% External forces
+% External forces
 Vc = 0;
 beta_vc = deg2rad(45);
 
@@ -43,11 +33,16 @@ beta_vw = deg2rad(135);
 rho_a = 1.247;
 cy = 0.95;
 cn = 0.15;
+Loa = 161;
 A_Lw = 10*Loa;
 
-%% Controller
+% Controller-gains
 zeta_PID = 1;
-w_b = 0.06; 
+w_b = 0.06; % 0.06
+K = 0.0075;
+T = 169.5493;
+
+m = 17.0677e6;
 
 % Calculating controller-gains using p. 537
 % The controller becomes unstable due to having too large controller
@@ -69,13 +64,21 @@ Kp = delta_r_max / e_psi_max;
 Kd = (2*zeta_PID*w_psi*T - 1)/K;
 Ki = w_psi/10 * Kp;
 
-%% Reference model
+% Rudder limitations
+rudder_max  = 40 * pi/180;        % Max rudder angle      (rad)
+d_rudder_max = 5  * pi/180;       % Max rudder derivative (rad/s)
+
+% Reference model
 w_ref = 0.03;
 zeta_ref = 1;
 
 psi_d = 0;
 r_d = 0;
 a_d = 0;
+
+% Limits required to get any effect... ?
+%r_max = 0.02 * pi/180;
+%a_max = 0.01 * pi/180;
 
 % But shouldn't these also be used to represent physical limitations
 % that is present in the ship/model?
@@ -85,22 +88,24 @@ a_max = 0.5 * pi/180;
 e_psi_int = 0;
 delta_c = 0;
 
-%% Simulation
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% MAIN LOOP
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 simdata = zeros(Ns+1,16);       % Table of simulation data
 psi_d_arr = zeros(1, Ns+1);
 
 for i=1:Ns+1
-    %% Time
     t = (i-1) * h;              % Time (s)
     
-    %% Current disturbance
+    % Current disturbance
     uc = Vc*cos(beta_vc - x(6));
     vc = Vc*sin(beta_vc - x(6));
     nu_c = [ uc vc 0 ]';
     
-    %% Wind disturbance
+    % Wind disturbance
     Ywind = 0;
     Nwind = 0;
+    %{
     if t >= 200,
         u_rw = x(1) - Vw*cos(beta_vw - x(6));
         v_rw = x(2) - Vw*sin(beta_vw - x(6));
@@ -111,13 +116,15 @@ for i=1:Ns+1
         Ywind = dynamic_pressure*cy*sin(gamma_rw)*A_Lw;
         Nwind = dynamic_pressure*cn*sin(2*gamma_rw)*A_Lw*Loa;
     end
+    %}
     tau_wind = [0 Ywind Nwind]';
     
     u_d = U_ref;
-    %delta_c = 7.5;
-    %n_c = 10;
+    delta_c = 7.5;
+    n_c = 10;
     
-    %% Reference model
+    % Reference model
+    %{
     sat_rd = sat_value(r_d, r_max);
     sat_ad = sat_value(a_d, a_max);
     psi_d_dot = sat_rd;
@@ -130,7 +137,9 @@ for i=1:Ns+1
     
     psi_d_arr(i) = psi_d;
     
-    %% Control law
+    u_d = U_ref;
+    
+    % Control law
     e_psi = ssa(-psi_d + x(6));
     e_r = ssa(-r_d + x(3));
     
@@ -139,13 +148,15 @@ for i=1:Ns+1
     e_psi_int = e_psi_int + h*e_psi_int_dot;
     
     delta_c = -Kp*e_psi - Kd*e_r - Ki*e_psi_int;
-    n_c = 10;                   % Propeller speed (rps)    
+    n_c = 10;                   % Propeller speed (rps)
+    %}
     
-    %% Ship dynamics
+    
+    
+    % Ship dynamics
     u = [delta_c n_c]';
     [xdot,u] = ship(x,u,nu_c,tau_wind, U_ref);
     
-    %% Sideslip and crab
     % Using equation 10.138, it is given that the body-velocities are
     % calculated in the ship dynamics
     % Calculating crab and sideslip based on this
@@ -158,14 +169,16 @@ for i=1:Ns+1
     
     sideslip = asin(u_r/norm(U_r, 2));
     
-    %% Store simulation data 
+    % Store simulation data in a table (for testing)
     simdata(i,:) = [t x(1:3)' x(4:6)' x(7) x(8) u(1) u(2) u_d psi_d r_d crab sideslip];     
  
-    %% Euler integration
+    % Euler integration
     x = euler2(xdot,x,h);    
 end
 
-%% Plotting
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% PLOTS
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 t       = simdata(:,1);                 % s
 u       = simdata(:,2);                 % m/s
 v       = simdata(:,3);                 % m/s
@@ -223,7 +236,7 @@ hold on;
 plot(t, ones(1, Ns+1)*psi_ref);
 hold off;
 
-%% Functions
+
 function sat_val = sat_value(val, abs_lim)
     sat_val = val;
     if abs(val) >= abs_lim
