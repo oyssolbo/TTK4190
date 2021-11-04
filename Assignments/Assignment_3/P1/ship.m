@@ -64,8 +64,6 @@ u_r = nu(1) - u_c;
 v_r = nu(2) - v_c;
 r_r = nu(3);
 
-w_nb_b = [0, 0, 0];
-
 %% Mass matrix
 % Added mass matrix
 Xudot = -8.9830e5;
@@ -86,7 +84,6 @@ M_RB = [m, 0,    0;
 
 % Mass matrix according to 6.103
 M = M_A + M_RB;
-% M_inv = inv(M);
 
 %% Input matrix
 t_thr = 0.05;           % Thrust deduction number
@@ -133,10 +130,10 @@ epsilon = 0.001;
 C_R = 0;
 
 L_pp = L; % Characteristic linear dimension (length of the ship) 
-R_n = L_pp*1e6*abs(u_r);
+R_n = L_pp*1e6*abs(u_r) + 1e-16;    % Adding small term to prevent lg(0)
 C_f = 0.075/((log10(R_n) - 2)^2 + epsilon) + C_R;
 
-X_n = -1/2*rho*S*(1+k)*C_f*abs(nu(1))*nu(1);
+X_n = -1/2*rho*S*(1+k)*C_f*abs(u_r)*u_r;
 
 % Cross-flow drag
 num_strips = 10;
@@ -147,9 +144,9 @@ Ycf = 0; % Initial cross-flow drag in Y
 Ncf = 0; % Initial cross-flow drag in N
 
 for xL = -L/2:dx:L/2,
-    Ucf = abs(v_r + xL*nu(3))*(v_r + xL*nu(3));
-    Ycf = Ycf - 0.5*rho*T*Cd_2D*Ucf*dx;    % Sway force
-    Ncf = Ncf - 0.5*rho*T*Cd_2D*xL*Ucf*dx; % Yaw moment
+    Ucf = abs(v_r + xL*r_r)*(v_r + xL*r_r);
+    Ycf = Ycf - 0.5*rho*T*Cd_2D*Ucf*dx;    
+    Ncf = Ncf - 0.5*rho*T*Cd_2D*xL*Ucf*dx; 
 end
 
 D_n = [X_n, 0,   0; 
@@ -163,15 +160,13 @@ D = D + D_n;
 R = Rzyx(0,0,eta(3));
 
 %% Thrust 
-thr = rho * Dia^4 * KT * abs(n) * n;    % Thrust command (N)
+thr = rho*Dia^4*KT*abs(n)*n;    % Thrust command (N)
 
 %% Ship dynamics
 u = [ thr delta ]';
-tau = Bi * u;
-% Must also add the effect from the current into the expression for a 
-% total (but equivalent since v_c_b = 0) expression
+tau = Bi*u;
 nu_dot = M \ (tau - C*nu - D*nu); % M_inv * (tau - C_RB * nu); 
-eta_dot = R * nu;    
+eta_dot = R*nu;    
 
 % Rudder saturation and dynamics (Sections 9.5.2)
 if abs(delta_c) >= delta_max
@@ -179,12 +174,12 @@ if abs(delta_c) >= delta_max
 end
 
 delta_dot = delta_c - delta;
-if abs(delta_dot) >= Ddelta_max
+if abs(delta_dot) >= Ddelta_max,
     delta_dot = sign(delta_dot)*Ddelta_max;
 end    
 
 %% Propeller dynamics
-n_dot = (1/10) * (n_c - n);
+n_dot = (1/10)*(n_c - n);
 
 %% Return value
 xdot = [nu_dot' eta_dot' delta_dot n_dot]';

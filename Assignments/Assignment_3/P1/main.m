@@ -7,7 +7,7 @@
 % USER INPUTS
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 h  = 0.05;    % Sampling time [s]
-Ns = 1000;    % Num samples
+Ns = 1500;    % Num samples
 
 psi_ref = 10 * pi/180;  % Desired yaw angle (rad)
 u_ref   = 7;            % Desired surge speed (m/s)
