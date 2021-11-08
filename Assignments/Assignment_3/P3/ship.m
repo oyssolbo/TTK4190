@@ -184,7 +184,7 @@ epsilon = 1e-14;
 w = 0.25;   % Guessed value (0.2 - 0.4) normally
 t = 0.1;    % Guessed value (0.05 - 0.2) normally
 
-J_a = @(n_k, u_a) u_a / (n_k*Dia + epsilon);  % Adding epsilong to prevent division by zero
+J_a = @(n_k, u_a) u_a / (n_k*Dia + epsilon);  % Adding epsilon to prevent division by zero
 T = @(n_k, u_a) rho*Dia^4*K_T*J_a(n_k, u_a)*abs(n_k)*n_k;
 Q = @(n_k, u_a) rho*Dia^5*K_Q*J_a(n_k, u_a)*abs(n_k)*n_k;
 
@@ -203,6 +203,7 @@ n_dot = 1/I_m * (Q_m - Q(n, u_a)); % Converting n from rpm to rps?
 
 %thr = T(n, u_a); %rho * Dia^4 * K_T * abs(n) * n;    % Thrust command (N)
 thr = T_d;
+
 %% Ship dynamics
 R = Rzyx(0,0,eta(3));
 u = [ thr delta ]';

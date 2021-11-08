@@ -65,7 +65,7 @@ rho = 1025;             % Density of water (m/s^3)
 delta_max  = 40 * pi/180;        % Max rudder angle      (rad)
 Ddelta_max = 5  * pi/180;        % Max rudder derivative (rad/s)
 
-% Thrust-calculation
+% Propeller - cofficients
 PD = 1.5;   % Pitch / diameter ratio
 AEAO = 0.65;% Blade area ratio
 z = 4;      % Num propeller-blades
@@ -184,24 +184,24 @@ epsilon = 1e-14;
 w = 0.25;   % Guessed value (0.2 - 0.4) normally
 t = 0.1;    % Guessed value (0.05 - 0.2) normally
 
-J_a = @(n, u) u / (n*D + epsilon);  % Adding epsilong to prevent division by zero
-T = @(n, u_a) rho*D^4*K_T*J_a(n, u)*abs(n)*n;
-Q = @(n, u_a) rho*D^5*K_Q*J_a(n, u)*abs(n)*n;
+J_a = @(n_k, u_a) u_a / (n_k*Dia + epsilon);  % Adding epsilong to prevent division by zero
+T = @(n_k, u_a) rho*Dia^4*K_T*J_a(n_k, u_a)*abs(n_k)*n_k;
+Q = @(n_k, u_a) rho*Dia^5*K_Q*J_a(n_k, u_a)*abs(n_k)*n_k;
 
 u_a = (1 - w) * x(1);
 
 % Q = K_Q * rho * D^5 * abs(n) * n;
 % T = K_T * rho * D^4 * abs(n) * n;
+T_d = U_ref*Xu / (t - 1);
 
 Q_d = @(n_d, u_a) Q(n_d, u_a); 
 
-n_d = n_c / 60;
-Q_m = 1/(T_m + 1) * Q_d(n_d, u_a); 
+n_d = sqrt(abs(T_d / (K_T*rho*Dia^4)))*sign(T_d);
+Q_m = 1/(T_m + 1) * Q_d(n_d, u_a);
 
 n_dot = 1/I_m * (Q_m - Q(n, u_a)); % Converting n from rpm to rps?
 
 %thr = T(n, u_a); %rho * Dia^4 * K_T * abs(n) * n;    % Thrust command (N)
-T_d = U_ref*Xu / (t -)
 thr = T_d;
 %% Ship dynamics
 R = Rzyx(0,0,eta(3));

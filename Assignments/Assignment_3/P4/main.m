@@ -6,16 +6,17 @@
 clear all; close all;
 %% Input
 h  = 0.1;               % Sampling time [s]
-Ns = 10000;             % Num samples
+Ns = 50000;             % Num samples
 
-psi_ref_init = 10 * pi/180 * ones(1, Ns/4);  % Desired yaw angle (rad)
-psi_ref_end = -20 * pi/180 * ones(1, (Ns - Ns/4));
-psi_ref = [psi_ref_init, psi_ref_end];
-psi_ref = 10 * pi/180;
+% Initial reference for P1-P3
+%psi_ref_init = 10 * pi/180 * ones(1, Ns/4);  % Desired yaw angle (rad)
+%psi_ref_end = -20 * pi/180 * ones(1, (Ns - Ns/4) + 1);
+%psi_ref = [psi_ref_init, psi_ref_end];
+%psi_ref = 10 * pi/180;
 U_ref   = 9;            % Desired surge speed (m/s)
 
 %% Initial states
-eta = [0 0 0]';
+eta = [0 0 -110*pi/180]';
 nu  = [0.1 0 0]';
 delta = 0;
 n = 0;
@@ -27,7 +28,6 @@ rudder_max  = 40 * pi/180;        % Max rudder angle      (rad)
 d_rudder_max = 5  * pi/180;       % Max rudder derivative (rad/s)
 
 Loa = 161;
-m = 17.0677e6;
 
 % First order Nomoto
 K = 0.0075;
@@ -40,45 +40,54 @@ AEAO = 0.65;% Blade area ratio
 z = 4;      % Num propeller-blades
 [K_T, K_Q] = wageningen(J_a, PD, AEAO, z);
 
-%% Propultion system
-I_m = 1e5;
-K_m = 0.6;
-T_m = 10;
-tau = 0;
-rho = 1025;
-epsilon = 1e-14;
+%% Waypoints
+load WP
 
-J_a = @(n, u) u_a / (n * D + epsilon);  % Adding epsilong to prevent division by zero
-T = @(n, u_a) rho*D^4*K_T*J_a(n, u)*abs(n)*n;
-Q = @(n, u_a) rho*D^5*K_Q*J_a(n, u)*abs(n)*n;
+num_wpts = width(WP);
+assert(num_wpts >= 1, "Not enough waypoints");
+
+wpt_idx = 1;
+Roa = 2*Loa;                  % Distance when switching between waypoints
+
+% Using current position to go towards first waypoint
+curr_wpt = eta(1:2);
+next_wpt = WP(:,wpt_idx);   % Assuming WP = [x; y];
+if num_wpts >= 1,
+    curr_wpt = WP(:,wpt_idx);  % Assuming WP = [x; y];
+    next_wpt = WP(:,wpt_idx+1);
+end
+
 
 %% External forces
 Vc = 0;
 beta_vc = deg2rad(45);
 
 % Wind-coefficients
-Vw = 10;
+Vw = 0;
 beta_vw = deg2rad(135);
 rho_a = 1.247;
 cy = 0.95;
 cn = 0.15;
 A_Lw = 10*Loa;
 
+% Initial wind-force/moment
+Ywind = 0;
+Nwind = 0;
+
 %% Controller
 zeta_PID = 1;
 w_b = 0.06; 
-
-% Calculating controller-gains using p. 537
-% The controller becomes unstable due to having too large controller
-% valus due the large mass m
 w_PID = 1/(sqrt(1-2*zeta_PID^2 + sqrt(4*zeta_PID^4 - 4*zeta_PID^2 + 2))) * w_b;
 
-Kp = m*w_PID^2;
-Kd = 2*zeta_PID*w_PID*m;
+% Using eq. 15.95, ex. 15.7 and algorithm 15.1
+m = T/K;
+d = 1/K;
+k = 0;      % No 'spring'-force in yaw
+
+Kp = m*w_PID^2 - k;
+Kd = 2*zeta_PID*w_PID*m - d;
 Ki = w_PID/10*Kp;
 
-% Using eq. 15.69 - 15.71 to calculate the controller gains. Gives a much
-% better response compared to preiously
 e_psi_max = 1 * pi/180;
 delta_r_max = 40 * pi/180;
 
@@ -89,7 +98,7 @@ Kd = (2*zeta_PID*w_psi*T - 1)/K;
 Ki = w_psi/10 * Kp;
 
 %% Reference model
-w_ref = 0.03;
+w_ref = 0.5;
 zeta_ref = 1;
 
 psi_d = 0;
@@ -98,8 +107,8 @@ a_d = 0;
 
 % But shouldn't these also be used to represent physical limitations
 % that is present in the ship/model?
-r_max = 1 * pi/180;
-a_max = 0.5 * pi/180;
+r_max = 2 * pi/180;
+a_max = 1 * pi/180;
 
 e_psi_int = 0;
 delta_c = 0;
@@ -118,8 +127,6 @@ for i=1:Ns+1
     nu_c = [ uc vc 0 ]';
     
     %% Wind disturbance
-    Ywind = 0;
-    Nwind = 0;
     if t >= 200,
         u_rw = x(1) - Vw*cos(beta_vw - x(6));
         v_rw = x(2) - Vw*sin(beta_vw - x(6));
@@ -132,33 +139,60 @@ for i=1:Ns+1
     end
     tau_wind = [0 Ywind Nwind]';
     
+    %% Waypoint
+    pos = x(1:2);
+    
+    % Logic when s1witching waypoint
+    if norm(next_wpt - pos, 2) <= Roa,
+        disp("Acheived new wpt at t = " + t + " with pos = " + pos);
+        % Inside circle of acceptance
+        % Checking if there are any more waypoints
+        assert(wpt_idx <= num_wpts, "Invalid number of changes in waypoints");
+        if wpt_idx == num_wpts,
+            % Final waypoint. Turn of the engine and idle...
+            % Would be cool to enable DP or something here...
+            U_ref = 0;
+            curr_wpt = pos;
+            next_wpt = pos; 
+        else
+            wpt_idx = wpt_idx + 1;
+            curr_wpt = WP(:, wpt_idx);
+            next_wpt = WP(:, wpt_idx+1); % Why doesn't this trigger an error?
+            %Because it is only invoked once...
+            % Solve this problem once the vessel will follow the path...
+        end
+    end
+    
+    psi_ref = guidance(pos, curr_wpt, next_wpt, 1/Loa); % Something is fucked here...
+    %psi_ref = 10*pi/180; % For debugging-purposes
     u_d = U_ref;
-    %delta_c = 7.5;
-    %n_c = 10;
     
     %% Reference model
     sat_rd = sat_value(r_d, r_max);
     sat_ad = sat_value(a_d, a_max);
     psi_d_dot = sat_rd;
     r_d_dot = sat_ad;
-    a_d_dot = -(2*zeta_ref + 1)*w_ref*sat_ad - (2*zeta_ref + 1)*w_ref^2*sat_rd + w_ref^3*(psi_ref - psi_d);   % -(2*zeta_ref + 1)*w_ref*sat(a_d) - (2*zeta_ref + 1)*w_ref^2*sat(r_d) + w_ref^3*(psi_ref - psi_d);
+    a_d_dot = -(2*zeta_ref + 1)*w_ref*sat_ad - (2*zeta_ref + 1)*w_ref^2*sat_rd + w_ref^3*(ssa(psi_ref - psi_d));   % -(2*zeta_ref + 1)*w_ref*sat(a_d) - (2*zeta_ref + 1)*w_ref^2*sat(r_d) + w_ref^3*(psi_ref - psi_d);
     
-    psi_d = psi_d + h*psi_d_dot;
+    psi_d = wrapTo2Pi(psi_d + h*psi_d_dot); % Can see that the system gets a desired psi that greatly exceeds the maximum value...
     r_d = r_d + h*r_d_dot;
     a_d = a_d + h*a_d_dot;
     
     psi_d_arr(i) = psi_d;
     
     %% Control law
+    % Heading
     e_psi = ssa(-psi_d + x(6));
     e_r = ssa(-r_d + x(3));
     
     % With integral windup
-    e_psi_int_dot = e_psi; %anti_windup(e_psi, delta_c, delta_c - x(7), rudder_max, d_rudder_max);
+    e_psi_int_dot = anti_windup(e_psi, delta_c, delta_c - x(7), rudder_max, d_rudder_max);
     e_psi_int = e_psi_int + h*e_psi_int_dot;
     
     delta_c = -Kp*e_psi - Kd*e_r - Ki*e_psi_int;
-    n_c = 10;                   % Propeller speed (rps)    
+    
+    % Propeller speed
+    n_c = x(8);                   % Propeller speed (rps) (But is it really in rps or in rpm as indicated in ship.m)
     
     %% Ship dynamics
     u = [delta_c n_c]';
@@ -206,25 +240,31 @@ figure(1)
 figure(gcf)
 subplot(311)
 plot(y,x,'linewidth',2); axis('equal')
-title('North-East positions (m)'); xlabel('(m)'); ylabel('(m)'); 
+title('North-East positions (m)'); 
+xlabel('(m)'); ylabel('(m)'); 
 subplot(312)
 plot(t,psi,t,psi_d,'linewidth',2);
-title('Actual and desired yaw angles (deg)'); xlabel('time (s)');
+title('Actual and desired yaw angles (deg)'); 
+xlabel('time (s)');
 subplot(313)
 plot(t,r,t,r_d,'linewidth',2);
-title('Actual and desired yaw rates (deg/s)'); xlabel('time (s)');
+title('Actual and desired yaw rates (deg/s)'); 
+xlabel('time (s)');
 
 figure(2)
 figure(gcf)
 subplot(311)
 plot(t,u,t,u_d,'linewidth',2);
-title('Actual and desired surge velocities (m/s)'); xlabel('time (s)');
+title('Actual and desired surge velocities (m/s)'); 
+xlabel('time (s)');
 subplot(312)
 plot(t,n,t,n_c,'linewidth',2);
-title('Actual and commanded propeller speed (rpm)'); xlabel('time (s)');
+title('Actual and commanded propeller speed (rpm)'); 
+xlabel('time (s)');
 subplot(313)
 plot(t,delta,t,delta_c,'linewidth',2);
-title('Actual and commanded rudder angles (deg)'); xlabel('time (s)');
+title('Actual and commanded rudder angles (deg)'); 
+xlabel('time (s)');
 
 figure(3)
 figure(gcf)
@@ -235,12 +275,14 @@ subplot(212)
 plot(t,sideslip,'linewidth',2);
 title('Sideslip (deg)'); xlabel('time (s)');
 
-
 figure(4)
-plot(t, psi_d_arr)
-hold on;
-plot(t, ones(1, Ns+1)*psi_ref);
-hold off;
+plot(t,u,t,u_d,'linewidth',2);
+title('Actual and desired surge velocities (m/s)');
+legend({'u', 'u_d'})
+xlabel('Time (s)');
+ylabel('Surge (m/s)');
+
+pathplotter(x,y);
 
 %% Functions
 function sat_val = sat_value(val, abs_lim)
