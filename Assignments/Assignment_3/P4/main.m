@@ -88,6 +88,7 @@ Kp = m*w_PID^2 - k;
 Kd = 2*zeta_PID*w_PID*m - d;
 Ki = w_PID/10*Kp;
 
+%{
 e_psi_max = 1 * pi/180;
 delta_r_max = 40 * pi/180;
 
@@ -96,6 +97,7 @@ w_psi = sqrt(K/T * delta_r_max/e_psi_max);
 Kp = delta_r_max / e_psi_max;
 Kd = (2*zeta_PID*w_psi*T - 1)/K;
 Ki = w_psi/10 * Kp;
+%}
 
 %% Reference model
 w_ref = 0.5;
