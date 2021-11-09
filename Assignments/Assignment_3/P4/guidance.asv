@@ -1,6 +1,6 @@
 function chi_d = guidance(ship_pos, current_waypoint, next_waypoint, lookahead)
     % Important note regarding adpative lookahead distance
-    % A lareger lookadhead distance is better when the system is closer to
+    % A larger lookadhead distance is better when the system is closer to
     % the desired waypoint, as it prevents overshoot better
     % A smaller lookahead distance is preferable when the ships is further
     % away, as it creates a more aggressive controller
@@ -24,11 +24,11 @@ function chi_d = guidance(ship_pos, current_waypoint, next_waypoint, lookahead)
     R = [cos(pi_p), -sin(pi_p);
          sin(pi_p),  cos(pi_p)];
     ep = R' * (ship_pos - current_waypoint);
-    y_ep = (R' * (ship_pos - current_waypoint))(2);
+    y_ep = ep(2);
    
     % Calculate controller gains according to 12.79
     Kp = 1/lookahead;
     
     % Calculate desired course uisng eq. 12.78
-    chi_d = pi_p - atan(Kp * y_ep);
+    chi_d = wrapTo2Pi(pi_p - atan(Kp * y_ep))
 end
