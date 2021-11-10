@@ -3,7 +3,8 @@
 % Author:           Solbø, Ø. & Strøm, C.
 % Study program:    MTTK
 
-clear all; close all;
+clear; 
+close all;
 %% Input
 h  = 0.1;               % Sampling time [s]
 Ns = 20000;             % Num samples
@@ -54,7 +55,6 @@ end
 
 psi_ref = guidance(eta(1:2), curr_wpt, next_wpt, lookahead);
 crab = atan2(x(2), x(1));
-
 
 %% External forces
 Vc = 0;
