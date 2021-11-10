@@ -1,4 +1,4 @@
-function [xdot,u] = ship(x,u,nu_c,tau_ext, U_ref)
+function [xdot,u] = ship(x,u,nu_c,tau_ext)
 %% Information
 % [xdot,u] = ship(x,u,nu_c,tau_ext) returns the time derivative of the state vector: 
 % x = [ u v r x y psi delta n ]' for a ship with L = 161 m where:
@@ -34,7 +34,7 @@ function [xdot,u] = ship(x,u,nu_c,tau_ext, U_ref)
 
 %% Assertion
 % Check of input and state dimensions
-if (length(x)~= 8),error('x-vector must have dimension 8 !');end
+if (length(x)~= 9),error('x-vector must have dimension 8 !');end
 if (length(u)~= 2),error('u-vector must have dimension 2 !');end
 
 %% Dimensional states and input
@@ -69,7 +69,7 @@ Ddelta_max = 5  * pi/180;        % Max rudder derivative (rad/s)
 PD = 1.5;   % Pitch / diameter ratio
 AEAO = 0.65;% Blade area ratio
 z = 4;      % Num propeller-blades
-[K_T, K_Q] = wageningen(0, PD, AEAO, z); 
+[KT, KQ] = wageningen(0, PD, AEAO, z); 
 
 %% Mass matrix
 % Added mass matrix
@@ -153,6 +153,7 @@ end
 d = -[Xns Ycf Ncf]';
 
 %% Linearized model using sway-yaw subsystem
+%{
 % Linear matrices
 C_RB_star = zeros(3);
 C_RB_star(2,3) = m*U_ref;
@@ -172,8 +173,9 @@ M_lin = M(2:3,2:3);
 
 % Transfer function
 [den, num] = ss2tf(-M_lin\N_lin, M_lin\b, [0, 1], 0);
-
-%% Propultion system
+%}
+%% Propultion system (incorrect)
+%{
 I_m = 1e5;
 K_m = 0.6;
 T_m = 10;
@@ -200,14 +202,16 @@ n_d = sqrt(abs(T_d / (K_T*rho*Dia^4)))*sign(T_d);
 Q_m = 1/(T_m + 1) * Q_d(n_d, u_a);
 
 n_dot = 1/I_m * (Q_m - Q(n, u_a)); % Converting n from rpm to rps?
+%}
+%% Thrust
+thr = rho * Dia^4 * KT * abs(n) * n;    % Thrust command (N)
+Q = rho * Dia^5 * KQ * abs(n) * n;      % Propeller torque (Nm)
 
-%thr = T(n, u_a); %rho * Dia^4 * K_T * abs(n) * n;    % Thrust command (N)
-thr = T_d;
 %% Ship dynamics
 R = Rzyx(0,0,eta(3));
-u = [ thr delta ]';
-tau = B_i(nu_r(1),delta) * u;
-nu_dot = [nu(3)*vc -nu(3)*uc 0]' + M \ (tau_ext + tau - (C_RB + C_A + D) * nu_r - d);
+u = [thr, delta]';
+tau = B_i(nu_r(1), delta) * u;
+nu_dot = [nu(3)*vc, -nu(3)*uc, 0]' + M \ (tau_ext + tau - (C_RB + C_A + D) * nu_r - d);
 eta_dot = R * nu;    
 
 % Rudder saturation and dynamics (Sections 9.5.2)
@@ -223,6 +227,13 @@ end
 % Propeller dynamics
 % n_dot = (1/10) * (n_c - n);
 
-xdot = [nu_dot' eta_dot' delta_dot n_dot]';
+Im = 1e5; Tm = 10; Km = 0.6;                     % Propulsion parameters
+Qd = rho * Dia^5 * KQ * abs(n_c) * n_c;          % Desired moment
+Y = Qd/Km;                                       % Feedforward moment controller
+Qm = x(9);
+Qm_dot = 1/Tm * (-Qm + Km*Y);
+n_dot =  1/Im * (Qm - Q);
+
+xdot = [nu_dot' eta_dot' delta_dot n_dot Qm_dot]';
 u = [delta_c n_c]';
 end

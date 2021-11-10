@@ -20,7 +20,8 @@ eta = [0 0 -110*pi/180]';
 nu  = [0.1 0 0]';
 delta = 0;
 n = 0;
-x = [nu' eta' delta n]';
+Qm = 0;
+x = [nu' eta' delta n Qm]';
 
 %% Ship coefficients
 % Rudder limitations
@@ -88,6 +89,7 @@ Kp = m*w_PID^2 - k;
 Kd = 2*zeta_PID*w_PID*m - d;
 Ki = w_PID/10*Kp;
 
+%{
 e_psi_max = 1 * pi/180;
 delta_r_max = 40 * pi/180;
 
@@ -96,9 +98,10 @@ w_psi = sqrt(K/T * delta_r_max/e_psi_max);
 Kp = delta_r_max / e_psi_max;
 Kd = (2*zeta_PID*w_psi*T - 1)/K;
 Ki = w_psi/10 * Kp;
+%}
 
 %% Reference model
-w_ref = 05;
+w_ref = 0.5;
 zeta_ref = 1;
 
 psi_d = 0;
@@ -138,11 +141,25 @@ for i=1:Ns+1
         Nwind = dynamic_pressure*cn*sin(2*gamma_rw)*A_Lw*Loa;
     end
     tau_wind = [0 Ywind Nwind]';
+   
+        else
+            wpt_idx = wpt_idx + 1;
+            curr_wpt = WP(:, wpt_idx);
+            next_wpt = WP(:, wpt_idx+1); % Why doesn't this trigger an error?
+            %Because it is only invoked once...
+            % Solve this problem once the vessel will follow the path...
+        end
+    end
+    
+    psi_ref = guidance(pos, curr_wpt, next_wpt, 1/Loa); % Something is fucked here...
+    %psi_ref = 10*pi/180; % For debugging-purposes
+    u_d = U_ref;
     
     %% Waypoint
+    %x(6) = wrapTo2Pi(x(6));
     pos = x(1:2);
     
-    % Logic when s1witching waypoint
+    % Logic when switching waypoint
     if norm(next_wpt - pos, 2) <= Roa,
         disp("Acheived new wpt at t = " + t + " with pos = " + pos);
         % Inside circle of acceptance
@@ -158,14 +175,69 @@ for i=1:Ns+1
             wpt_idx = wpt_idx + 1;
             curr_wpt = WP(:, wpt_idx);
             next_wpt = WP(:, wpt_idx+1); % Why doesn't this trigger an error?
-            %Because it is only invoked once...
+            % Because it is only invoked once...
             % Solve this problem once the vessel will follow the path...
         end
     end
     
-    psi_ref = guidance(pos, curr_wpt, next_wpt, 1/Loa); % Something is fucked here...
-    %psi_ref = 10*pi/180; % For debugging-purposes
+    %if mod(i,10) == 0,
+    psi_ref = guidance(pos, curr_wpt, next_wpt, lookahead) - crab; % Something is fucked here...
+    %end
+    %psi_ref = 330*pi/180; % For debugging-purposes
     u_d = U_ref;
+    
+    %% Reference model
+    sat_rd = sat_value(r_d, r_max);
+    sat_ad = sat_value(a_d, a_max);
+    psi_d_dot = sat_rd;
+    r_d_dot = sat_ad;
+    a_d_dot = -(2*zeta_ref + 1)*w_ref*sat_ad - (2*zeta_ref + 1)*w_ref^2*sat_rd + w_ref^3*(ssa(psi_ref - psi_d));   % -(2*zeta_ref + 1)*w_ref*sat(a_d) - (2*zeta_ref + 1)*w_ref^2*sat(r_d) + w_ref^3*(psi_ref - psi_d);
+    
+    psi_d = wrapTo2Pi(psi_d + h*psi_d_dot); % Can see that the system gets a desired psi that greatly exceeds the maximum value...
+    r_d = r_d + h*r_d_dot;
+    a_d = a_d + h*a_d_dot;
+    
+    psi_d_arr(i) = psi_d;
+    
+    %% Control law
+    % Heading
+    e_psi = ssa(-psi_d + x(6));
+    e_r = ssa(-r_d + x(3));
+    
+    % With integral windup
+    e_psi_int_dot = anti_windup(e_psi, delta_c, delta_c - x(7), rudder_max, d_rudder_max);
+    e_psi_int = e_psi_int + h*e_psi_int_dot;
+    
+    delta_c = -Kp*e_psi - Kd*e_r - Ki*e_psi_int;
+    
+    % Propeller speed
+    n_c = x(8);                   % Propeller speed (rps) (But is it really in rps or in rpm as indicated in ship.m)
+    
+    %% Ship dynamics
+    u = [delta_c n_c]';
+    [xdot,u] = ship(x,u,nu_c,tau_wind);
+    
+    %% Sideslip and crab
+    % Using equation 10.138, it is given that the body-velocities are
+    % calculated in the ship dynamics
+    % Calculating crab and sideslip based on this
+    crab = atan2(x(2), x(1));
+    
+    R = Rzyx(0, 0, x(6));
+    U_ned = R'*[x(1), x(2), 0]';
+    U_r = U_ned - [uc, vc, 0]';
+    u_r = U_r(1);
+    
+    sideslip = asin(u_r/norm(U_r, 2));
+    
+    %% Store simulation data 
+    simdata(i,:) = [t x(1:3)' x(4:6)' x(7) x(8) u(1) u(2) u_d psi_d r_d crab sideslip];     
+ 
+    %% Euler integration
+    x = euler2(xdot,x,h);  
+
+    
+
     
     %% Reference model
     sat_rd = sat_value(r_d, r_max);
@@ -212,10 +284,10 @@ for i=1:Ns+1
     sideslip = asin(u_r/norm(U_r, 2));
     
     %% Store simulation data 
-    simdata(i,:) = [t x(1:3)' x(4:6)' x(7) x(8) u(1) u(2) u_d psi_d r_d crab sideslip];     
+    simdata(i,:) = [t x(1:3)' x(4:6)' x(7) x(8) u(1) u(2) u_d wrapTo2Pi(psi_d) r_d crab sideslip];     
  
     %% Euler integration
-    x = euler2(xdot,x,h);    
+    x = euler2(xdot,x,h);  
 end
 
 %% Plotting

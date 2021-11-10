@@ -6,7 +6,7 @@
 clear all; close all;
 %% Input
 h  = 0.1;               % Sampling time [s]
-Ns = 50000;             % Num samples
+Ns = 20000;             % Num samples
 
 % Initial reference for P1-P3
 %psi_ref_init = 10 * pi/180 * ones(1, Ns/4);  % Desired yaw angle (rad)
@@ -16,11 +16,12 @@ Ns = 50000;             % Num samples
 U_ref   = 9;            % Desired surge speed (m/s)
 
 %% Initial states
-eta = [0 0 -110*pi/180]';
+eta = [0 0 wrapTo2Pi(-110*pi/180)]';
 nu  = [0.1 0 0]';
 delta = 0;
 n = 0;
-x = [nu' eta' delta n]';
+Qm = 0;
+x = [nu' eta' delta n Qm]';
 
 %% Ship coefficients
 % Rudder limitations
@@ -33,13 +34,6 @@ Loa = 161;
 K = 0.0075;
 T = 169.5493;
 
-% Thrust-calculation
-J_a = 0;    % Open-water advance coefficient
-PD = 1.5;   % Pitch / diameter ratio
-AEAO = 0.65;% Blade area ratio
-z = 4;      % Num propeller-blades
-[K_T, K_Q] = wageningen(J_a, PD, AEAO, z);
-
 %% Waypoints
 load WP
 
@@ -48,6 +42,7 @@ assert(num_wpts >= 1, "Not enough waypoints");
 
 wpt_idx = 1;
 Roa = 2*Loa;                  % Distance when switching between waypoints
+lookahead = 1/(Loa);
 
 % Using current position to go towards first waypoint
 curr_wpt = eta(1:2);
@@ -56,6 +51,9 @@ if num_wpts >= 1,
     curr_wpt = WP(:,wpt_idx);  % Assuming WP = [x; y];
     next_wpt = WP(:,wpt_idx+1);
 end
+
+psi_ref = guidance(eta(1:2), curr_wpt, next_wpt, lookahead);
+crab = atan2(x(2), x(1));
 
 
 %% External forces
@@ -88,19 +86,8 @@ Kp = m*w_PID^2 - k;
 Kd = 2*zeta_PID*w_PID*m - d;
 Ki = w_PID/10*Kp;
 
-%{
-e_psi_max = 1 * pi/180;
-delta_r_max = 40 * pi/180;
-
-w_psi = sqrt(K/T * delta_r_max/e_psi_max);
-
-Kp = delta_r_max / e_psi_max;
-Kd = (2*zeta_PID*w_psi*T - 1)/K;
-Ki = w_psi/10 * Kp;
-%}
-
 %% Reference model
-w_ref = 0.5;
+w_ref = 0.1;
 zeta_ref = 1;
 
 psi_d = 0;
@@ -142,9 +129,10 @@ for i=1:Ns+1
     tau_wind = [0 Ywind Nwind]';
     
     %% Waypoint
+    %x(6) = wrapTo2Pi(x(6));
     pos = x(1:2);
     
-    % Logic when s1witching waypoint
+    % Logic when switching waypoint
     if norm(next_wpt - pos, 2) <= Roa,
         disp("Acheived new wpt at t = " + t + " with pos = " + pos);
         % Inside circle of acceptance
@@ -160,13 +148,15 @@ for i=1:Ns+1
             wpt_idx = wpt_idx + 1;
             curr_wpt = WP(:, wpt_idx);
             next_wpt = WP(:, wpt_idx+1); % Why doesn't this trigger an error?
-            %Because it is only invoked once...
+            % Because it is only invoked once...
             % Solve this problem once the vessel will follow the path...
         end
     end
     
-    psi_ref = guidance(pos, curr_wpt, next_wpt, 1/Loa); % Something is fucked here...
-    %psi_ref = 10*pi/180; % For debugging-purposes
+    %if mod(i,10) == 0,
+    psi_ref = guidance(pos, curr_wpt, next_wpt, lookahead); % Something is fucked here...
+    %end
+    %psi_ref = 330*pi/180; % For debugging-purposes
     u_d = U_ref;
     
     %% Reference model
@@ -176,7 +166,7 @@ for i=1:Ns+1
     r_d_dot = sat_ad;
     a_d_dot = -(2*zeta_ref + 1)*w_ref*sat_ad - (2*zeta_ref + 1)*w_ref^2*sat_rd + w_ref^3*(ssa(psi_ref - psi_d));   % -(2*zeta_ref + 1)*w_ref*sat(a_d) - (2*zeta_ref + 1)*w_ref^2*sat(r_d) + w_ref^3*(psi_ref - psi_d);
     
-    psi_d = wrapTo2Pi(psi_d + h*psi_d_dot); % Can see that the system gets a desired psi that greatly exceeds the maximum value...
+    psi_d = psi_d + h*psi_d_dot; % Can see that the system gets a desired psi that greatly exceeds the maximum value...
     r_d = r_d + h*r_d_dot;
     a_d = a_d + h*a_d_dot;
     
@@ -194,11 +184,11 @@ for i=1:Ns+1
     delta_c = -Kp*e_psi - Kd*e_r - Ki*e_psi_int;
     
     % Propeller speed
-    n_c = x(8);                   % Propeller speed (rps) (But is it really in rps or in rpm as indicated in ship.m)
+    n_c = 9;% x(8);                   % Propeller speed (rps) (But is it really in rps or in rpm as indicated in ship.m)
     
     %% Ship dynamics
     u = [delta_c n_c]';
-    [xdot,u] = ship(x,u,nu_c,tau_wind, U_ref);
+    [xdot,u] = ship(x,u,nu_c,tau_wind);
     
     %% Sideslip and crab
     % Using equation 10.138, it is given that the body-velocities are
@@ -214,10 +204,10 @@ for i=1:Ns+1
     sideslip = asin(u_r/norm(U_r, 2));
     
     %% Store simulation data 
-    simdata(i,:) = [t x(1:3)' x(4:6)' x(7) x(8) u(1) u(2) u_d psi_d r_d crab sideslip];     
+    simdata(i,:) = [t x(1:3)' x(4:6)' x(7) x(8) u(1) u(2) u_d wrapTo2Pi(psi_d) r_d crab sideslip];     
  
     %% Euler integration
-    x = euler2(xdot,x,h);    
+    x = euler2(xdot,x,h);  
 end
 
 %% Plotting
