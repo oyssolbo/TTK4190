@@ -14,8 +14,7 @@ function [chi_d, y_int_dot] = guidance(state_struct, current_waypoint, next_wayp
     % ship is a slow system, the function could be invoked for every tenth
     % iteration or something
     % - The funstion takes in the lookahead distance, such that this could
-    % be chosen spesifically between ships of different types. The same
-    % reason is also chosen for kappa
+    % be chosen spesifically between ships of different types
     
     % Extract values
     lookahead = ILOS_params.lookahead;
@@ -42,7 +41,6 @@ function [chi_d, y_int_dot] = guidance(state_struct, current_waypoint, next_wayp
     chi_d = pi_p - atan(Kp * y_ep + Ki*y_int);
     
     % Calculate y_int_dot using eq. 12.109
-    % Should ideally be calculated outside of this function, but the
-    % consistency of this code is so terrible nonetheless...
+    % Should ideally be 
     y_int_dot = lookahead*y_ep / (lookahead^2 + (y_ep + kappa*y_int)^2);
 end
