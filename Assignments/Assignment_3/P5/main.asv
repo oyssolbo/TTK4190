@@ -35,8 +35,8 @@ d_rudder_max = 5  * pi/180;       % Max rudder derivative (rad/s)
 Loa = 161;
 
 % First order Nomoto
-K = -0.0049; %0.0075;
-T = -99.4713; % 169.5493;
+K = 0.0075;
+T = 169.5493;
 
 %% Waypoints
 load WP
@@ -47,7 +47,7 @@ assert(num_wpts >= 1, "Not enough waypoints");
 wpt_idx = 1;
 Roa = 2*Loa;                  % Distance when switching between waypoints
 lookahead = 10*Loa;
-kappa = 100;
+kappa = 0.1;
 
 ILOS_params.lookahead = lookahead;
 ILOS_params.kappa = kappa;
@@ -71,7 +71,7 @@ end
 crab = atan2(x(2), x(1));
 
 %% External forces
-Vc = 1;
+Vc = 0;
 beta_vc = deg2rad(45);
 
 % Wind-coefficients
@@ -154,8 +154,8 @@ ssd.Ed = Ed;
 
 %% KF-parameters
 % Tuning values
-q11 = 1e-6;  % 0.075
-q22 = 1e-6;  % 0.001
+q11 = 0.1;  % 0.075
+q22 = 0.01;  % 0.001
 
 % Only one measurement
 r = w_psi_std^2;
@@ -181,9 +181,6 @@ psi_d_arr = zeros(1, Ns+1);
 for i=1:Ns+1
     %% Time
     t = (i-1) * h;              % Time (s)
-    if mod(i, 1000) == 0,
-        i
-    end
     
     %% Measurements
     y_psi = x(6) + deg2rad(normrnd(0, w_psi_std));
@@ -237,6 +234,7 @@ for i=1:Ns+1
         end
     end
     
+    
     [psi_ref, y_int_dot] = guidance(state_struct, curr_wpt, next_wpt, ILOS_params);
     psi_ref = wrapTo2Pi(psi_ref);
     if use_ILOS == 0 && use_crab_compensation == 1,
@@ -265,8 +263,8 @@ for i=1:Ns+1
     
     %% Control law
     % Heading
-    e_psi = ssa(-psi_d + x_KF(1)); %ssa(-psi_d + y_psi); %ssa(-psi_d + x(6));
-    e_r = ssa(-psi_d + x_KF(2)); %ssa(-r_d + y_r); %ssa(-r_d + x(3));
+    e_psi = ssa(-psi_d + x(6));
+    e_r = ssa(-r_d + x(3));
     
     % With integral windup
     e_psi_int_dot = anti_windup(e_psi, delta_c, delta_c - x(7), rudder_max, d_rudder_max);
@@ -274,7 +272,7 @@ for i=1:Ns+1
     
     delta_c = -Kp*e_psi - Kd*e_r - Ki*e_psi_int;
     
-    %% Propultion system
+    % Propeller speed
     %n_c = 9;% x(8);                   % Propeller speed (rps) (But is it really in rps or in rpm as indicated in ship.m)
     
     %% Ship dynamics
@@ -403,6 +401,15 @@ title('Estimated bias (deg/s)');
 legend({'b_{hat}'})
 xlabel('Time (s)');
 ylabel('Bias (deg)');
+
+%pathplotter(x,y);
+
+figure(5)
+plot(t,chi,t,chi_d,'linewidth',2);
+title('Actual and desired course (deg)');
+legend({'\chi', '\chi_d'})
+xlabel('Time (s)');
+ylabel('Course (deg)');
 
 pathplotter(x,y);
 
