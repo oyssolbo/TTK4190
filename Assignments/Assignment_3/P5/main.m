@@ -35,8 +35,16 @@ Loa = 161;
 K = 0.0075;
 T = 169.5493;
 
-%% State space for task 1
-% Continous state models for task 1 (!)
+% For P5 - after relinearization
+T = -99.4713;
+K = -0.0049;
+
+%% Measurement noise
+w_psi_std = 0.5;    % [deg]^(1/2)
+w_r_std = 0.1;      % [deg/s]^(1/2)
+
+%% State space
+% Continous state
 Ac = [0, 1, 0;
       0, -1/T, -K/T;
       0, 0, 0];
@@ -44,52 +52,48 @@ Bc = [0;
       K/T;
       0];
 Cc = [1, 0, 0];
-Dc = 1;
 Ec = [0, 0;
      1, 0;
      0, 1];
 
-% Discretizing for task 1 (!)
-% This method is only valid when Ac is a nonsingular matrix
-%Ad = exp(Ac.*h);
-%Bd = Ac \ (Ad - eye(3)) * Bc;
-Cd = Cc;
-Dd = Dc;
-%Ed = Ac \ (Ad - eye(3)) * Ec;
-
+% Discretizing
 [Ad0, Bd] = c2d(Ac, Bc, h);
 [Ad1, Ed] = c2d(Ac, Ec, h);
+Cd = Cc;
 
 assert(isequal(Ad0, Ad1), "Ad0 != Ad1");
 Ad = Ad0;
 
 % Checking observability
 O = obsv(Ad, Cd);
-O_rank = rank(O);
+disp("Observability-rank for task 1: " + rank(O));
 
-disp("Observability-rank for task 1: " + O_rank);
+% Creating struct for discrete state space
+ssd.Ad = Ad;
+ssd.Bd = Bd;
+ssd.Cd = Cd;
+ssd.Ed = Ed;
 
-%% State space for task 2 (!)
-% Continous state models for task 2 (!)
-% Only C and D changes from task 1 to task 2
-Cc = [1, 0, 0;
-      0, 1, 0];
-Dc = [1, 0;
-      0, 1];
+%% KF-parameters
+% Tuning values
+q11 = 0.1;  % 0.075
+q22 = 0.01;  % 0.001
 
-% Discretizing for task 2 (!)
-Cd = Cc;
-Dd = Dc;
+% Only one measurement
+r = w_psi_std^2;
 
-% Checking observability
-O = obsv(Ad, Cd);
-O_rank = rank(O);
+% Tuning matrices
+Qd = diag([q11, q22]);
+Rd = diag([r]);
+ssd.Qd = Qd;
+ssd.Rd = Rd;
 
-disp("Observability-rank for task 2: " + O_rank);
+% Initial cov
+P_KF_prev = diag([0.5, 0.1, 0.01])*pi/180;
 
-%% Measurement noise
-w_psi_std = 0.5;    % [deg]^(1/2)
-w_r_std = 0.1;      % [deg/s]^(1/2)
+% Initial state
+x_KF_prev = [eta(3); nu(3); 0];
+delta_c = 0;
 
 %% Waypoints
 load WP
@@ -159,7 +163,7 @@ e_psi_int = 0;
 delta_c = 0;
 
 %% Simulation
-simdata = zeros(Ns+1,18);       % Table of simulation data
+simdata = zeros(Ns+1,21);       % Table of simulation data
 psi_d_arr = zeros(1, Ns+1);
 
 for i=1:Ns+1
@@ -171,6 +175,13 @@ for i=1:Ns+1
     y_r = x(3) + deg2rad(normrnd(0, w_r_std));
     
     y = [y_psi, y_r];
+    
+    %% KF
+    [x_KF, P_KF] = KF(x_KF_prev, P_KF_prev, delta_c, y_psi, ssd);
+    
+    x_KF_prev = x_KF;
+    P_KF_prev = P_KF;
+    
     %% Current disturbance
     uc = Vc*cos(beta_vc - x(6));
     vc = Vc*sin(beta_vc - x(6));
@@ -265,7 +276,7 @@ for i=1:Ns+1
     sideslip = asin(u_r/norm(U_r, 2));
     
     %% Store simulation data 
-    simdata(i,:) = [t x(1:3)' x(4:6)' x(7) x(8) u(1) u(2) u_d wrapTo2Pi(psi_d) r_d crab sideslip, y];     
+    simdata(i,:) = [t x(1:3)' x(4:6)' x(7) x(8) u(1) u(2) u_d wrapTo2Pi(psi_d) r_d crab sideslip, y, x_KF_prev'];     
  
     %% Euler integration
     x = euler2(xdot,x,h);  
@@ -290,7 +301,10 @@ crab    = (180/pi) * simdata(:,15);     % deg
 sideslip= (180/pi) * simdata(:,16);     % deg
 y_psi   = (180/pi) * simdata(:,17);     % deg
 y_r     = (180/pi) * simdata(:,18);     % deg/s
-        
+psi_hat = (180/pi) * simdata(:,19);
+r_hat   = (180/pi) * simdata(:,20);
+b_hat   = (180/pi) * simdata(:,21);
+
 figure(1)
 figure(gcf)
 subplot(311)
@@ -330,23 +344,47 @@ subplot(212)
 plot(t,sideslip,'linewidth',2);
 title('Sideslip (deg)'); xlabel('time (s)');
 
-figure(4)
+figure()
+subplot(2,1,1);
 plot(t,y_psi,t,psi,'linewidth',2);
 title('Measured and true heading (deg)');
 legend({'y_{psi}', 'psi'})
 xlabel('Time (s)');
 ylabel('Heading (deg)');
 
-figure(5)
+subplot(2,1,2);
 plot(t,y_r,t,r,'linewidth',2);
 title('Measured and true yaw rate (deg/s)');
 legend({'y_r', 'r'})
 xlabel('Time (s)');
 ylabel('Yaw rate (deg/s)');
 
-pathplotter(x,y);
+figure()
+subplot(3,1,1);
+plot(t,psi_hat,t,psi,'linewidth',2);
+title('Estimated and true yaw (deg/s)');
+legend({'\psi_{hat}', '\psi'})
+xlabel('Time (s)');
+ylabel('Yaw (deg)');
+
+subplot(3,1,2);
+plot(t,r_hat,t,r,'linewidth',2);
+title('Estimated and true yaw rate (deg/s)');
+legend({'r_{hat}', 'r'})
+xlabel('Time (s)');
+ylabel('Yaw rate (deg/s)');
+
+subplot(3,1,3);
+plot(t,b_hat,'linewidth',2);
+title('Estimated bias (deg/s)');
+legend({'b_{hat}'})
+xlabel('Time (s)');
+ylabel('Bias (deg)');
+
+%pathplotter(x,y);
 
 %% Functions
+% Saturating function
 function sat_val = sat_value(val, abs_lim)
     sat_val = val;
     if abs(val) >= abs_lim
@@ -354,9 +392,50 @@ function sat_val = sat_value(val, abs_lim)
     end
 end
 
+% Anti-windup function
 function x_dot_aw = anti_windup(x_dot, param_0_check, param_1_check , abs_0, abs_1)
     x_dot_aw = x_dot;
     if abs(param_0_check) >= abs_0 || abs(param_1_check) >= abs_1
         x_dot_aw = 0; 
     end
+end
+
+%% Kalman filter
+% Discrete time LTI KF
+function [x_pred, P_pred] = KF(x_prev, P_prev, u, y, ssd)
+    % Input
+    % x_prev previous state estimate
+    % P_prev previous state cov
+    % u control input (assumed known)
+    % y measurements (noisy)
+    % ssd discrete state-space
+    
+    % Return
+    % x_pred predicted state
+    % P_pred predicted state cov
+    
+    % Extracting matrices
+    Ad = ssd.Ad;
+    Bd = ssd.Bd;
+    Cd = ssd.Cd;
+    Ed = ssd.Ed;
+    
+    % Noise-matrixes
+    Qd = ssd.Qd;
+    Rd = ssd.Rd;
+    
+    % KF-gain
+    K = P_prev*Cd' / (Cd*P_prev*Cd' + Rd);
+    
+    % Corrector
+    x_hat = x_prev + K*(ssa(y - Cd*x_prev));
+    I_KCD = (eye(3) - K*Cd);
+    P_hat = I_KCD*P_prev*I_KCD' + K*Rd*K';
+    
+    % Predictor
+    x_pred = Ad*x_hat + Bd*u;
+    P_pred = Ad*P_hat*Ad' + Ed*Qd*Ed';
+    
+    % Correcting estimates to be within [0,2pi)
+    x_pred(1) = wrapTo2Pi(x_pred(1));
 end
