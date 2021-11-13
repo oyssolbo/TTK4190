@@ -30,16 +30,18 @@ T = 169.5493;
 
 %% Guidance
 load WP
-lookahead = 15*Loa;
-ROA = 5*Loa;
+lookahead = 15*Loa; 
+kappa = 2;
+ROA = 4*Loa;
 wp_n = 1;
+y_int = 0;
 
 %% External forces
-Vc = 0;
+Vc = 1;
 beta_vc = deg2rad(45);
 
 % Wind-coefficients
-Vw = 0;
+Vw = 1;
 beta_vw = deg2rad(135);
 rho_a = 1.247;
 cy = 0.95;
@@ -81,7 +83,7 @@ for i=1:Ns+1
     
     %% Currents
     nu_c = [Vc*cos(beta_vc - x(6)), Vc*sin(beta_vc - x(6)), 0 ]';
-    
+
     %% Wind
     if t >= 200
         u_rw = x(1) - Vw*cos(beta_vw - x(6));
@@ -96,6 +98,16 @@ for i=1:Ns+1
     end
     tau_wind = [0 Ywind Nwind]';
     
+    %% Sideslip and crab
+    crab = atan2(x(2), x(1));
+    
+    R = Rzyx(0, 0, x(6));
+    U_ned = R'*[x(1), x(2), 0]';
+    U_r = U_ned - nu_c';
+    v_r = U_r(2);
+    
+    sideslip = asin(v_r/norm(U_r, 2));
+    
     %% Guidance and reference model
     wp_ref = WP(:, wp_n);
     wp_t = WP(:, wp_n+1);
@@ -107,10 +119,9 @@ for i=1:Ns+1
             break % End simulation if we reach the final waypoint
         end
     end
-    
-    
-  
-    psi_ref = guidance(x(4:5), wp_ref, wp_t, lookahead);
+   
+    [psi_ref, dy_int] = integral_guidance(x(4:5), wp_ref, wp_t, ...
+        lookahead, kappa, y_int); % - crab; % crab angle compensation
     psi_ref = wrapTo2Pi(psi_ref);
     
     [r_d, a_d, psi_d] = reference_model(r_d, a_d, psi_d, psi_ref, h);
@@ -129,15 +140,6 @@ for i=1:Ns+1
     u = [delta_c n_c]';
     [xdot,u] = ship(x,u,nu_c,tau_wind);
     
-    %% Sideslip and crab
-    crab = atan2(x(2), x(1));
-    
-    R = Rzyx(0, 0, x(6));
-    U_ned = R'*[x(1), x(2), 0]';
-    U_r = U_ned - nu_c';
-    v_r = U_r(2);
-    
-    sideslip = asin(v_r/norm(U_r, 2));
     
     %% Course
     chi = wrapTo2Pi(x(6) + crab);
@@ -148,6 +150,7 @@ for i=1:Ns+1
  
     %% Euler integration
     x = euler2(xdot,x,h);  
+    y_int = y_int + h*dy_int;
 end
 
 simdata( all(~simdata,2), : ) = []; % Cut trailing zeros
