@@ -7,7 +7,7 @@ clear;
 close all;
 %% Input
 h  = 0.1;               % Sampling time [s]
-Ns = 100000;             % Num samples
+Ns = 6000;             % Num samples
 U_ref = 9;            % Desired surge speed (m/s)
 
 %% Initial states
@@ -130,7 +130,7 @@ for i=1:Ns+1
     x_hat(1) = wrapTo2Pi(x_hat(1));
     
     %% Currents
-    nu_c = [Vc*cos(beta_vc - x(6)), Vc*sin(beta_vc - x(6)), 0 ]';
+    nu_c = [Vc*cos(beta_vc - x_hat(1)), Vc*sin(beta_vc - x(6)), 0 ]';
 
     %% Wind
     if t >= 200
@@ -149,7 +149,7 @@ for i=1:Ns+1
     %% Sideslip and crab
     crab = atan2(x(2), x(1));
     
-    R = Rzyx(0, 0, x_hat(1));
+    R = Rzyx(0, 0, x(6));
     U_ned = R'*[x(1), x(2), 0]';
     U_r = U_ned - nu_c';
     v_r = U_r(2);
@@ -176,8 +176,8 @@ for i=1:Ns+1
     
     %% Control law
     % Heading
-    e_psi = ssa(-psi_d + x_hat(1));
-    e_r = ssa(-r_d + x_hat(2));
+    e_psi = ssa(-psi_d + x(6));
+    e_r = ssa(-r_d + x(3));
     
     % With integral windup
     e_psi_int_dot = anti_windup(e_psi, delta_c, delta_c - x(7), rudder_max, d_rudder_max);
@@ -190,7 +190,7 @@ for i=1:Ns+1
     
     
     %% Course
-    chi = wrapTo2Pi(x_hat(1) + crab);
+    chi = wrapTo2Pi(x(6) + crab);
     chi_ref = wrapTo2Pi(psi_ref);
     
     %% Store simulation data 
