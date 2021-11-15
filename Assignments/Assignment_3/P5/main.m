@@ -53,7 +53,7 @@ Ywind = 0;
 Nwind = 0;
 
 %% Controller
-zeta_n = 1;
+zeta_n = 1.005;
 w_b = 0.01; 
 w_n = 1/(sqrt(1-2*zeta_n^2 + sqrt(4*zeta_n^4 - 4*zeta_n^2 + 2))) * w_b;
 
@@ -77,7 +77,7 @@ n_c = 9;
 
 %% Kalman
 xm_hat = [0; 0; 0];
-Pm_hat = 1e-5*eye(3);
+Pm_hat = diag([0.03, 0.1 ,0.003])^2;
 
 T = -99.4731;
 K = -0.0049;
@@ -86,18 +86,15 @@ Ac = [0 1 0; 0 -1/T -K/T; 0 0 0];
 Bc = [0; K/T; 0];
 Ec = [0 0; 1 0; 0 1];
 Cc = [1 0 0];
-Dc = 0;
 
-Ad = eye(3) + h*Ac;
-Bd = h*Bc;
-Ed = h*Ec;
+[Ad, Bd] = c2d(Ac, Bc, h);
+[Ad, Ed] = c2d(Ac, Ec, h);
 Cd = Cc;
-Dd = Dc;
 
 sigma_psi = deg2rad(0.5);
 sigma_dpsi = deg2rad(0.1);
 
-Qd = diag([0.0005, 0.1])^2;
+Qd = diag([5e-5, 1e-4])^2;
 Rd = sigma_psi^2;
 
 %% Simulation
@@ -107,19 +104,19 @@ for i=1:Ns+1
     %% Time
     t = (i-1) * h;              % Time (s)
     
-        %% Generate yaw measurements
+    %% Generate yaw measurements
     psi_measurement = x(6) + normrnd(0, sigma_psi);
     dpsi_measurement = x(3) + normrnd(0, sigma_dpsi);
     
     %% KF
     K = Pm_hat*Cd'*inv(Cd*Pm_hat*Cd' + Rd);
-    IK = eye(3) - K*Cd;
+    IKC = eye(3) - K*Cd;
     
     y = psi_measurement;
     
     % Update
     x_hat = xm_hat + K*(y - Cd*xm_hat);
-    P_hat = IK*Pm_hat*IK' + K*Rd*K';
+    P_hat = IKC*Pm_hat*IKC' + K*Rd*K';
     
     % Predict
     xm_hat = Ad*x_hat + Bd*x(7);
