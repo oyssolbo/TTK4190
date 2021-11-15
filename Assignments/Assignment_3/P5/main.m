@@ -54,7 +54,7 @@ Nwind = 0;
 
 %% Controller
 zeta_n = 1;
-w_b = 0.06; 
+w_b = 0.01; 
 w_n = 1/(sqrt(1-2*zeta_n^2 + sqrt(4*zeta_n^4 - 4*zeta_n^2 + 2))) * w_b;
 
 % Using eq. 15.95, ex. 15.7 and algorithm 15.1
@@ -64,6 +64,7 @@ d = 1/K;
 Kp = m*w_n^2;
 Kd = 2*zeta_n*w_n*m - d;
 Ki = w_n/10*Kp;
+
 
 %% Reference model
 psi_d = 0;
@@ -96,11 +97,11 @@ Dd = Dc;
 sigma_psi = deg2rad(0.5);
 sigma_dpsi = deg2rad(0.1);
 
-Qd = diag([sigma_psi, sigma_dpsi])^2;
+Qd = diag([0.0005, 0.1])^2;
 Rd = sigma_psi^2;
 
 %% Simulation
-simdata = zeros(Ns+1,18);       % Table of simulation data
+simdata = zeros(Ns+1,23);       % Table of simulation data
 
 for i=1:Ns+1
     %% Time
@@ -194,7 +195,9 @@ for i=1:Ns+1
     chi_ref = wrapTo2Pi(psi_ref);
     
     %% Store simulation data 
-    simdata(i,:) = [t x(1:3)' x(4:6)' x(7) x(8) u(1) u(2) U_ref psi_d r_d crab sideslip, chi, chi_ref];     
+    simdata(i,:) = [t x(1:3)' x(4:6)' x(7) x(8) u(1) u(2) U_ref ...
+        psi_d r_d crab sideslip, chi, chi_ref, x_hat' ...
+        psi_measurement dpsi_measurement];     
  
     %% Euler integration
     x = euler2(xdot,x,h);  
@@ -222,6 +225,13 @@ crab    = (180/pi) * simdata(:,15);     % deg
 sideslip= (180/pi) * simdata(:,16);     % deg
 chi     = (180/pi) * simdata(:,17);     % deg
 chi_d = (180/pi) * simdata(:,18);     % deg
+psi_hat = (180/pi) * wrapTo2Pi(simdata(:, 19));
+dpsi_hat = (180/pi) * simdata(:, 20);
+delta_bias_hat = (180/pi) * simdata(:, 21);
+psi_measurement = (180/pi) * wrapTo2Pi(simdata(:,22));
+dpsi_measurement = (180/pi) * simdata(:,23);
+
+
 
 figure(1)
 figure(gcf)
@@ -249,8 +259,8 @@ plot(t,n,t,n_c,'linewidth',2);
 title('Actual and commanded propeller speed (rpm)'); 
 xlabel('time (s)');
 subplot(313)
-plot(t,delta,t,delta_c,'linewidth',2);
-title('Actual and commanded rudder angles (deg)'); 
+plot(t,delta_c,t,delta,'linewidth',2);
+title('Commanded and actual rudder angles (deg)'); 
 xlabel('time (s)');
 
 figure(3)
@@ -275,6 +285,49 @@ title('Actual and desired course (deg)');
 legend({'\chi', '\chi_d'})
 xlabel('Time (s)');
 ylabel('Course (deg)');
+
+figure(6)
+plot(t,psi_hat,t,psi,'linewidth',2);
+title('Estimated and actual yaw (deg)');
+legend({'Estimated yaw', 'Actual yaw'})
+xlabel('Time (s)');
+ylabel('Yaw (deg)');
+
+figure(7)
+plot(t,dpsi_hat,t,r,'linewidth',2);
+title('Estimated and actual yaw rate (deg)');
+legend({ 'Estimated yaw rate', 'Actual yaw rate'})
+xlabel('Time (s)');
+ylabel('Yaw rate (deg/s)');
+
+figure(8)
+plot(t,psi_measurement,t,psi,'linewidth',2);
+title('Measured and actual yaw (deg)');
+legend({'Measured yaw', 'Actual yaw'})
+xlabel('Time (s)');
+ylabel('Yaw (deg)');
+
+figure(9)
+plot(t,dpsi_measurement,t,r,'linewidth',2);
+title('Measured and actual yaw rate (deg/s)');
+legend({ 'Measured yaw rate', 'Actual yaw rate'})
+xlabel('Time (s)');
+ylabel('Yaw rate (deg/s)');
+
+figure(10)
+plot(t,psi_measurement,t,psi_hat,'linewidth',2);
+title('Measured and estimated yaw (deg)');
+legend({ 'Measured yaw', 'Estimated yaw'})
+xlabel('Time (s)');
+ylabel('Yaw (deg)');
+
+
+figure(11)
+plot(t,dpsi_measurement,t,dpsi_hat,'linewidth',2);
+title('Measured and estimated yaw rate (deg/s)');
+legend({ 'Measured yaw rate', 'Estimated yaw rate'})
+xlabel('Time (s)');
+ylabel('Yaw rate (deg/s)');
 
 pathplotter(x,y);
 
