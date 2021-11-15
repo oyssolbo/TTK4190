@@ -77,7 +77,7 @@ n_c = 9;
 
 %% Kalman
 xm_hat = [0; 0; 0];
-Pm_hat = diag([0.03, 0.1 ,0.003])^2;
+Pm_hat = diag([0.03, 0.1, 0.003])^2;
 
 T = -99.4731;
 K = -0.0049;
@@ -115,7 +115,7 @@ for i=1:Ns+1
     y = psi_measurement;
     
     % Update
-    x_hat = xm_hat + K*(y - Cd*xm_hat);
+    x_hat = xm_hat + K*(ssa(y - Cd*xm_hat));
     P_hat = IKC*Pm_hat*IKC' + K*Rd*K';
     
     % Predict
@@ -325,6 +325,12 @@ title('Measured and estimated yaw rate (deg/s)');
 legend({ 'Measured yaw rate', 'Estimated yaw rate'})
 xlabel('Time (s)');
 ylabel('Yaw rate (deg/s)');
+
+figure(12)
+plot(t,delta_bias_hat,'linewidth',2);
+title('Rudder bias (deg)');
+xlabel('Time (s)');
+ylabel('Bias (deg)');
 
 pathplotter(x,y);
 
